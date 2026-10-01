@@ -1,0 +1,6 @@
+{
+  "name":"@everylocale/adapters","version":"0.2.0","type":"module","license":"MIT","files":["dist"],
+  "exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}},
+  "scripts":{"build":"tsc -p tsconfig.json","typecheck":"tsc -p tsconfig.json --noEmit"},
+  "dependencies":{"@everylocale/core":"workspace:*"}
+}

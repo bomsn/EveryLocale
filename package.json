@@ -1,0 +1,42 @@
+{
+  "name": "everylocale",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "scripts": {
+    "build": "pnpm flags:bundle && pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "ci:host": "pnpm build && pnpm typecheck && pnpm format:check && pnpm test && pnpm release:pack && pnpm test:next",
+    "ci:local": "node tools/ci-local.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\" tools tests/*.test.ts packages/server/public examples/next/app",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" tools tests/*.test.ts packages/server/public examples/next/app",
+    "test:wordpress": "tsx tools/wordpress-smoke.ts",
+    "test:next": "node tools/next-smoke.mjs",
+    "flags:bundle": "pnpm --filter @everylocale/core build && node tools/bundle-flags.mjs && node tools/bundle-guides.mjs",
+    "start": "pnpm --filter @everylocale/server start",
+    "dev": "pnpm --filter @everylocale/server dev",
+    "cli": "tsx packages/cli/src/index.ts",
+    "benchmark": "tsx --env-file-if-exists=.env tools/benchmark.ts",
+    "setup": "node tools/setup.mjs",
+    "release:pack": "pnpm build && node tools/pack.mjs"
+  },
+  "devDependencies": {
+    "@remix-run/node": "2.17.5",
+    "@remix-run/react": "2.17.5",
+    "@types/node": "24.10.1",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "flag-icons": "7.5.0",
+    "prettier": "3.8.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

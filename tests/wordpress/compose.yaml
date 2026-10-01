@@ -1,0 +1,28 @@
+services:
+  db:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: disposable-test-root
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: disposable-test-password
+    volumes: [database:/var/lib/mysql]
+  wordpress:
+    image: wordpress:6.9.4-php8.3-apache
+    ports: [127.0.0.1:4313:80]
+    environment: &environment
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: disposable-test-password
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wordpress:/var/www/html
+  cli:
+    image: wordpress:cli-php8.3
+    user: '33:33'
+    environment: *environment
+    volumes:
+      - wordpress:/var/www/html
+volumes:
+  database:
+  wordpress:

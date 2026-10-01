@@ -1,0 +1,8 @@
+{
+  "name":"@everylocale/react","version":"0.2.0","type":"module","license":"MIT","files":["dist","assets"],
+  "exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}},
+  "scripts":{"build":"tsc -p tsconfig.json","typecheck":"tsc -p tsconfig.json --noEmit"},
+  "dependencies":{"@everylocale/core":"workspace:*","react-intl":"12.1.3"},
+  "peerDependencies":{"react":">=18","@types/react":">=18"},
+  "devDependencies":{"react":"18.3.1","@types/react":"18.3.28"}
+}

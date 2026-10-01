@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/
+artifacts/
+test-results/
+docs/benchmarks/
+tools/import-benchmark.ts
+packages/react/src/flags.ts
+packages/server/public/guides/
+packages/server/public/flags/
+pnpm-lock.yaml

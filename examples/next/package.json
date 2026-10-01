@@ -1,0 +1,6 @@
+{
+  "name":"everylocale-next-example","version":"0.2.0","private":true,"type":"module",
+  "scripts":{"dev":"next dev --webpack -p 4315","build":"next build --webpack","start":"next start -p 4315"},
+  "dependencies":{"next":"16.3.8","react":"19.2.0","react-dom":"19.2.0","@everylocale/core":"file:../../artifacts/everylocale-core-0.2.0.tgz","@everylocale/adapters":"file:../../artifacts/everylocale-adapters-0.2.0.tgz","@everylocale/react":"file:../../artifacts/everylocale-react-0.2.0.tgz"},
+  "devDependencies":{"typescript":"5.9.3","@types/node":"24.10.1","@types/react":"19.2.14","@types/react-dom":"19.2.3"}
+}

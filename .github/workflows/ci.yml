@@ -1,0 +1,44 @@
+name: Verify EveryLocale
+on:
+  push:
+    branches: [master]
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        # pnpm 9's native build tool recognizes VS 2022, not the VS 2026 image.
+        os: [ubuntu-24.04, windows-2022]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm format:check
+      - run: pnpm test
+      - run: pnpm release:pack
+      - run: pnpm test:next
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: docker build -t everylocale:0.2.0 .
+      - run: pnpm test:wordpress

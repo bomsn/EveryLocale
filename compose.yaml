@@ -1,0 +1,22 @@
+services:
+  everylocale:
+    build: .
+    image: everylocale:0.2.0
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      EVERYLOCALE_HOST: 0.0.0.0
+      EVERYLOCALE_DATABASE: /data/everylocale.sqlite
+    ports:
+      - "127.0.0.1:4310:4310"
+    volumes:
+      - everylocale-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+volumes:
+  everylocale-data:

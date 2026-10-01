@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>EveryLocale | Your localization workspace</title>
+    <link rel="stylesheet" href="/assets/workspace.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to workspace</a>
+    <section id="login" class="login-panel" hidden>
+      <a class="brand" href="/" aria-label="EveryLocale home"
+        ><span class="brand-mark" data-icon="languages" aria-hidden="true"></span>EveryLocale</a
+      >
+      <h1>A world of languages.<br />One thoughtful workspace.</h1>
+      <p>Bring your content. Make it feel at home in every language.</p>
+      <form id="login-form">
+        <label for="owner-token">Workspace access token</label
+        ><input id="owner-token" type="password" required autocomplete="current-password" /><button
+          class="button primary"
+          type="submit"
+        >
+          Open workspace <span data-icon="arrow-right" aria-hidden="true"></span>
+        </button>
+      </form>
+      <p class="small">Self-hosted. Your content, your models, your approval.</p>
+    </section>
+    <div id="workspace" class="app-shell" hidden>
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="EveryLocale home"
+          ><span class="brand-mark" data-icon="languages" aria-hidden="true"></span>EveryLocale</a
+        >
+        <nav class="navigation" aria-label="Workspace">
+          <button data-view="overview" aria-current="page">
+            <span class="nav-icon" data-icon="overview" aria-hidden="true"></span>Overview
+          </button>
+          <button data-view="review">
+            <span class="nav-icon" data-icon="review" aria-hidden="true"></span>Review
+            <span id="review-count" class="nav-count" hidden></span>
+          </button>
+          <button data-view="content">
+            <span class="nav-icon" data-icon="content" aria-hidden="true"></span>Content
+          </button>
+          <button data-view="connect">
+            <span class="nav-icon" data-icon="connect" aria-hidden="true"></span>Connect
+          </button>
+        </nav>
+        <div class="sidebar-bottom">
+          <p class="sidebar-note">Your content. Your models.<br />Your publishing rules.</p>
+          <button
+            id="settings"
+            class="sidebar-action"
+            aria-label="Project settings"
+            title="Project settings"
+          >
+            <span data-icon="settings" aria-hidden="true"></span
+            ><span class="settings-label">Project settings</span></button
+          ><button id="logout" class="sidebar-action" hidden>
+            <span data-icon="sign-out" aria-hidden="true"></span>Sign out
+          </button>
+        </div>
+      </aside>
+      <div class="app-body">
+        <header class="workspace-header">
+          <div class="project-switcher">
+            <label for="project" class="visually-hidden">Current project</label
+            ><select id="project"></select>
+          </div>
+          <button
+            id="new-project"
+            class="button subtle"
+            aria-label="New project"
+            title="New project"
+          >
+            <span data-icon="plus" aria-hidden="true"></span
+            ><span class="wide-label">New project</span>
+          </button>
+        </header>
+        <main id="main" tabindex="-1">
+          <section id="view-overview" class="view overview" aria-labelledby="overview-title">
+            <div class="page-heading">
+              <div>
+                <p class="eyebrow">YOUR LOCALIZATION WORKSPACE</p>
+                <h1 id="overview-title">Localization, without the friction.</h1>
+                <p id="overview-description">Give every language a place in your product.</p>
+              </div>
+              <button id="start-review" class="button primary">
+                Start reviewing <span data-icon="arrow-right" aria-hidden="true"></span>
+              </button>
+            </div>
+            <div id="overview-stats" class="stats-strip"></div>
+            <div id="approval-policy" class="policy-notice"></div>
+            <section class="language-section" aria-labelledby="languages-heading">
+              <div class="section-heading">
+                <h2 id="languages-heading">Your languages</h2>
+                <span id="source-description" class="small"></span>
+              </div>
+              <div id="language-coverage"></div>
+            </section>
+            <div class="overview-footer">
+              <p id="provider-notice" class="small"></p>
+              <button id="overview-connect" class="text-button">
+                Connect your app <span data-icon="arrow-right" aria-hidden="true"></span>
+              </button>
+            </div>
+          </section>
+          <section id="view-review" class="view" hidden aria-labelledby="review-title">
+            <div class="page-heading compact">
+              <div>
+                <h1 id="review-title">Translation review</h1>
+                <p>Compare the meaning. Refine the wording. Keep every language consistent.</p>
+              </div>
+              <div class="language-choice">
+                <label for="language">Review language</label
+                ><select id="language"></select>
+              </div>
+            </div>
+            <div id="review-layout" class="review-layout">
+              <section class="list-panel" aria-label="Translation queue">
+                <div class="queue-tools">
+                  <label for="search" class="visually-hidden">Search translations</label
+                  ><input
+                    id="search"
+                    type="search"
+                    placeholder="Find a word or message…"
+                    maxlength="200"
+                  />
+                  <div class="queue-filter">
+                    <label for="status" class="visually-hidden">Translation status</label
+                    ><select id="status">
+                      <option value="review">Needs review</option>
+                      <option value="">All statuses</option>
+                      <option value="approved">Approved</option>
+                      <option value="failed">Failed</option>
+                      <option value="pending">Queued</option>
+                      <option value="running">Translating</option>
+                      <option value="stale">Source changed</option></select
+                    ><button id="batch-mode" class="text-button">Select several</button>
+                  </div>
+                </div>
+                <div id="rows" class="translation-list"></div>
+                <div id="empty" class="empty-state" hidden>
+                  <h2>You’re all caught up.</h2>
+                  <p>No translations match this view. Try another status or import more content.</p>
+                </div>
+                <button id="load-more" class="button subtle" hidden>Load more translations</button>
+                <div id="batch-bar" class="batch-bar" hidden>
+                  <span id="batch-count"></span
+                  ><button id="batch-approve" class="button primary" disabled>
+                    Approve selected
+                  </button>
+                </div>
+              </section>
+              <section
+                id="detail"
+                class="detail-panel"
+                aria-label="Translation comparison"
+              ></section>
+            </div>
+            <div class="review-footer">
+              <span class="small">Approval stays tied to the exact wording you review.</span
+              ><button id="refresh" class="text-button">Refresh queue</button>
+            </div>
+          </section>
+          <section id="view-content" class="view" hidden aria-labelledby="content-title">
+            <div class="page-heading compact">
+              <div>
+                <h1 id="content-title">Your content, in every language.</h1>
+                <p>Messages, articles, or an entire document. Structure stays protected.</p>
+              </div>
+              <button id="import" class="button primary">
+                <span data-icon="plus" aria-hidden="true"></span>Add content
+              </button>
+            </div>
+            <div id="content-list" class="content-list"></div>
+            <section
+              id="document-panel"
+              class="document-panel"
+              hidden
+              aria-labelledby="document-heading"
+            >
+              <div class="section-heading">
+                <h2 id="document-heading">Selected content</h2>
+                <label for="content-language" class="visually-hidden">Content language</label
+                ><select id="content-language"></select>
+              </div>
+              <label for="document">Content to work with</label
+              ><select id="document"></select>
+              <p id="document-description" class="small"></p>
+              <div class="document-actions">
+                <button id="translate" class="button primary">
+                  <span data-icon="languages" aria-hidden="true"></span>Translate changes</button
+                ><button id="preview-document" class="button">Preview</button
+                ><button id="download-document" class="button">
+                  <span data-icon="download" aria-hidden="true"></span>Download approved
+                </button>
+              </div>
+            </section>
+            <p class="small content-note">
+              Translations start only when you ask. Only changed segments use your model budget.
+            </p>
+          </section>
+          <section id="view-connect" class="view" hidden aria-labelledby="connect-title">
+            <div class="page-heading compact">
+              <div>
+                <h1 id="connect-title">Connect once. Translate continuously.</h1>
+                <p>Choose your stack and follow three steps. Your approval rules travel with it.</p>
+              </div>
+              <button id="tokens" class="button">
+                <span data-icon="key" aria-hidden="true"></span>Manage access
+              </button>
+            </div>
+            <div class="integration-options" role="group" aria-label="Integration">
+              <button data-integration="cli" aria-pressed="true">Files &amp; CLI</button
+              ><button data-integration="remix" aria-pressed="false">Remix</button
+              ><button data-integration="next" aria-pressed="false">Next.js</button
+              ><button data-integration="wordpress" aria-pressed="false">WordPress</button
+              ><button data-integration="http" aria-pressed="false">HTTP API</button>
+            </div>
+            <div id="integration-guide" class="integration-guide"></div>
+            <section class="export-section" aria-labelledby="export-heading">
+              <div>
+                <h2 id="export-heading">Ready for your app</h2>
+                <p class="small">
+                  Download a catalog for your app. Every export keeps a version you can restore.
+                </p>
+              </div>
+              <div class="export-controls">
+                <label for="export-language" class="visually-hidden">Export language</label
+                ><select id="export-language"></select
+                ><button id="export" class="button primary">
+                  <span data-icon="download" aria-hidden="true"></span>Export approved</button
+                ><button id="versions" class="button">
+                  <span data-icon="clock" aria-hidden="true"></span>Version history
+                </button>
+              </div>
+            </section>
+            <p id="budget" class="small"></p>
+          </section>
+        </main>
+      </div>
+    </div>
+    <div id="message" role="status" aria-live="polite" hidden></div>
+    <dialog
+      id="decision-dialog"
+      aria-labelledby="decision-title"
+      aria-describedby="decision-message"
+    >
+      <form method="dialog">
+        <h2 id="decision-title"></h2>
+        <p id="decision-message"></p>
+        <div id="decision-reason-field" hidden>
+          <label for="decision-reason">Approval explanation</label
+          ><textarea id="decision-reason" rows="4" maxlength="2000"></textarea>
+        </div>
+        <div class="dialog-actions">
+          <button class="button" value="cancel" formnovalidate>Cancel</button
+          ><button id="decision-accept" class="button primary" value="accept">Continue</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="project-dialog" aria-labelledby="project-dialog-title">
+      <form id="project-form">
+        <h2 id="project-dialog-title">Create a project</h2>
+        <p>Choose where your words begin and where they’ll go.</p>
+        <p class="small">Fields are required unless marked optional.</p>
+        <label for="project-name">Project name</label
+        ><input id="project-name" required maxlength="120" placeholder="My product" /><label
+          for="project-id"
+          >Project identifier</label
+        ><input
+          id="project-id"
+          required
+          pattern="[a-z0-9][a-z0-9_-]{0,79}"
+          placeholder="my-product"
+        /><label for="source-locale">Original language</label
+        ><select id="source-locale"></select>
+        <fieldset class="language-fieldset">
+          <legend>Translate into</legend>
+          <div id="target-choices" class="target-choices"></div>
+        </fieldset>
+        <details>
+          <summary>Additional language codes (optional)</summary>
+          <label for="target-locales">Other BCP 47 language codes, separated by commas</label
+          ><input id="target-locales" placeholder="it, pt-BR, ja" />
+          <p class="small">
+            Removing a language disables its exports. Earlier approved versions are retained.
+          </p>
+        </details>
+        <fieldset class="approval-fieldset">
+          <legend>How should translations be approved?</legend>
+          <label class="approval-choice"
+            ><input type="radio" name="approval-mode" value="automatic" checked /><span
+              ><strong>Automatic approval</strong
+              ><small
+                >Validated translations pass AI review and become exportable. Material issues stay
+                in Review.</small
+              ></span
+            ></label
+          >
+          <label class="approval-choice"
+            ><input type="radio" name="approval-mode" value="human" /><span
+              ><strong>Human review gate</strong
+              ><small
+                >Every translation waits for your approval before it can be exported.</small
+              ></span
+            ></label
+          >
+          <p class="small">
+            Applies to future completed or reused translations. Changing this setting does not
+            approve the existing queue.
+          </p>
+        </fieldset>
+        <label for="project-budget">Total translation budget (USD)</label
+        ><input id="project-budget" type="number" min="0" step="0.01" value="5" required />
+        <p class="small">
+          A spending limit, not a charge. Inference uses your configured providers.
+        </p>
+        <details id="guidance">
+          <summary>Terminology and language guidance (optional)</summary>
+          <p class="small">Keep product names consistent and give your models useful context.</p>
+          <div id="glossary-fields"></div>
+          <button id="add-term" type="button" class="button subtle">Add a term</button>
+          <div id="instruction-fields"></div>
+        </details>
+        <div class="dialog-actions">
+          <button type="button" class="button" data-close>Cancel</button
+          ><button type="submit" class="button primary">Create project</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="import-dialog" aria-labelledby="import-title">
+      <form id="import-form">
+        <h2 id="import-title">Bring your content.</h2>
+        <p>Upload a file or paste text. Code, links, and markup stay protected.</p>
+        <label for="import-file" class="file-drop"
+          ><span data-icon="file" aria-hidden="true"></span>Choose a file<span
+            >JSON, YAML, PO, Markdown, MDX, or HTML · up to 2 MB</span
+          ></label
+        ><input
+          id="import-file"
+          type="file"
+          accept=".json,.yaml,.yml,.po,.md,.markdown,.mdx,.html,.htm"
+        />
+        <div class="form-pair">
+          <div>
+            <label for="namespace">Content name</label
+            ><input id="namespace" required value="messages" />
+          </div>
+          <div>
+            <label for="format">Format</label
+            ><select id="format">
+              <option value="json">JSON catalog</option>
+              <option value="yaml">YAML catalog</option>
+              <option value="markdown">Markdown</option>
+              <option value="mdx">MDX</option>
+              <option value="html">HTML / Gutenberg</option>
+              <option value="po">Gettext PO</option>
+            </select>
+          </div>
+        </div>
+        <label for="content">Content <span class="small">You can paste or edit it here</span></label
+        ><textarea id="content" rows="7" required spellcheck="false"></textarea>
+        <div class="dialog-actions">
+          <button type="button" class="button" data-close>Cancel</button
+          ><button type="submit" class="button primary">Import content</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="tokens-dialog" aria-labelledby="tokens-title">
+      <h2 id="tokens-title">Project access</h2>
+      <p>Create a separate token for each integration. Keep it on your server or in CI.</p>
+      <form id="token-form">
+        <fieldset>
+          <legend>Permissions</legend>
+          <div id="token-scopes" class="scope-list"></div>
+        </fieldset>
+        <label for="token-days">Expires after (days)</label
+        ><input id="token-days" type="number" min="1" max="365" value="30" required /><button
+          type="submit"
+          class="button primary"
+        >
+          Create access token
+        </button>
+      </form>
+      <div id="new-token" hidden>
+        <label for="token-value">Copy this token now. It will not be shown again.</label
+        ><textarea id="token-value" readonly rows="3"></textarea>
+      </div>
+      <div id="token-list"></div>
+      <div class="dialog-actions"><button class="button" data-close>Close</button></div>
+    </dialog>
+    <dialog id="preview-dialog" aria-labelledby="preview-title">
+      <h2 id="preview-title">See it in context.</h2>
+      <p id="preview-notice"></p>
+      <div class="document-comparison">
+        <div>
+          <h3>Original</h3>
+          <iframe id="source-preview" title="Original document preview" sandbox=""></iframe>
+        </div>
+        <div>
+          <h3>Translation</h3>
+          <iframe id="target-preview" title="Translation document preview" sandbox=""></iframe>
+        </div>
+      </div>
+      <div class="dialog-actions"><button class="button" data-close>Close</button></div>
+    </dialog>
+    <dialog id="versions-dialog" aria-labelledby="versions-title">
+      <h2 id="versions-title">Approved versions</h2>
+      <p>Restore a saved catalog. Withdrawn content stays withdrawn.</p>
+      <div id="version-list"></div>
+      <div class="dialog-actions"><button class="button" data-close>Close</button></div>
+    </dialog>
+    <script type="module" src="/assets/workspace.js"></script>
+  </body>
+</html>

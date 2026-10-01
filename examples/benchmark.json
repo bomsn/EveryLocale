@@ -1,0 +1,8 @@
+{
+  "project":{"id":"benchmark","name":"Localization benchmark","sourceLocale":"en","targetLocales":["ar","zh-Hant-TW","de","es","fr"],"budgetUsd":2,"glossary":[],"instructions":{"zh-Hant-TW":"Use natural Taiwan vocabulary.","ar":"Use Modern Standard Arabic."}},
+  "units":[
+    {"id":"welcome","source":"Welcome, {name}. Your report is ready.","kind":"icu","context":"Account notification"},
+    {"id":"count","source":"{count, plural, one {# report is ready} other {# reports are ready}}","kind":"icu","context":"Report list summary"},
+    {"id":"fact","source":"Your visibility score rose from 25 to 30. This comparison uses the same measured prompts.","kind":"text","context":"Report explanation; preserve measurements"}
+  ]
+}

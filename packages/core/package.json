@@ -1,0 +1,49 @@
+{
+  "name": "@everylocale/core",
+  "version": "0.2.0",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./locales": {
+      "types": "./dist/locales.d.ts",
+      "import": "./dist/locales.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./validation": {
+      "types": "./dist/validation.d.ts",
+      "import": "./dist/validation.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@formatjs/icu-messageformat-parser": "3.5.20",
+    "gettext-parser": "9.1.1",
+    "intl-messageformat": "12.1.2",
+    "opencc-js": "1.4.2",
+    "parse5": "8.0.1",
+    "plural-forms": "0.5.5",
+    "rehype-stringify": "10.0.1",
+    "remark-mdx": "3.1.1",
+    "remark-parse": "11.0.0",
+    "remark-rehype": "11.1.2",
+    "unified": "11.0.5",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/gettext-parser": "9.0.0"
+  }
+}
