@@ -1,6 +1,6 @@
 # Configuration
 
-The service reads environment variables from `.env`. `pnpm setup` creates the file with random workspace and session credentials. Configuration options are listed in [.env.example](../.env.example).
+The service reads environment variables from `.env`. `pnpm run setup` creates the file with random workspace and session credentials. Configuration options are listed in [.env.example](../.env.example).
 
 ## Models
 

@@ -22,7 +22,7 @@ git clone https://github.com/bomsn/EveryLocale.git
 cd EveryLocale
 pnpm install --frozen-lockfile
 pnpm build
-pnpm setup
+pnpm run setup
 pnpm start
 ```
 
@@ -32,7 +32,7 @@ Configure generation and review models in `.env`, then create a project, import 
 
 ## Docker
 
-Create `.env` with `pnpm setup`, then run:
+Create `.env` with `pnpm run setup`, then run:
 
 ```sh
 docker compose up --build -d
