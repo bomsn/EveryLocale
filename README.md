@@ -2,7 +2,11 @@
 
 Self-hosted AI localization for applications and content.
 
+[everylocale.com](https://everylocale.com) · Website coming soon.
+
 Translate message catalogs and documents with cloud or local models. EveryLocale validates translations, runs independent AI review, and exports approved revisions. Choose automatic approval or a human review gate for each project.
+
+![EveryLocale workspace showing language coverage for an example website](assets/screenshots/workspace.jpg)
 
 ## Features
 
@@ -54,6 +58,14 @@ Public URLs select the page language. Private interfaces use the account prefere
 - [HTTP API](docs/API.md)
 - [WordPress connector](adapters/wordpress/README.md)
 - [Contributing](CONTRIBUTING.md)
+
+## Review workspace
+
+Compare source and translation, see validation findings, and refine the wording. Projects with a human review gate approve each exact revision before export.
+
+![Arabic translation comparison in the optional human review workflow](assets/screenshots/review.jpg)
+
+Screenshots show fictional example content.
 
 ## License
 
