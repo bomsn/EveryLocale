@@ -57,6 +57,57 @@ test('sentence-level HTML extraction keeps inline markup and rejects reordered s
   );
 });
 
+test('Arabic and Chinese can omit English articles around inline tags without changing protected markup', () => {
+  const source =
+    '<!-- wp:paragraph --><p>A <strong>project</strong> groups text. The <a href="/guide/">guide</a> explains it.</p><code>const id = 1;</code><!-- /wp:paragraph -->';
+  const document = extractDocument(source, 'html', 'articles', { groupInline: true });
+  const unit = document.units[0]!;
+  const tokens = unit.source.match(/\[\[EL:[^\]]+\]\]/g)!;
+  assert.equal(tokens.length, 4);
+  for (const [locale, translation, expected] of [
+    [
+      'ar',
+      `${tokens[0]}المشروع${tokens[1]} يجمع النص. ${tokens[2]}الدليل${tokens[3]} يشرح ذلك.`,
+      '<strong>المشروع</strong>',
+    ],
+    [
+      'zh-Hant-TW',
+      `${tokens[0]}專案${tokens[1]}整理文字。${tokens[2]}指南${tokens[3]}提供說明。`,
+      '<strong>專案</strong>',
+    ],
+  ]) {
+    const rendered = document.render({ [unit.id]: translation! }, locale!);
+    assert.ok(rendered.includes(expected!));
+    assert.ok(rendered.includes('href="/guide/"'));
+    assert.ok(rendered.includes('<code>const id = 1;</code>'));
+    assert.ok(rendered.startsWith('<!-- wp:paragraph -->'));
+    assert.ok(rendered.endsWith('<!-- /wp:paragraph -->'));
+  }
+  assert.throws(
+    () =>
+      document.render(
+        { [unit.id]: `${tokens[0]}project${tokens[2]}guide${tokens[1]}end${tokens[3]}` },
+        'en',
+      ),
+    /structure/,
+  );
+});
+
+test('whole protected code values can change sentence order without changing their contents', () => {
+  const document = extractDocument(
+    '<p>Sign in with <code>ADMIN_TOKEN</code> from <code>.env</code>.</p>',
+    'html',
+    'login',
+    { groupInline: true },
+  );
+  const unit = document.units[0]!;
+  const tokens = unit.source.match(/\[\[EL:[^\]]+\]\]/g)!;
+  assert.equal(
+    document.render({ [unit.id]: `使用來自 ${tokens[1]} 的 ${tokens[0]} 登入。` }, 'zh-Hant-TW'),
+    '<p>使用來自 <code>.env</code> 的 <code>ADMIN_TOKEN</code> 登入。</p>',
+  );
+});
+
 test('single-quoted HTML attributes safely preserve apostrophes in translations', () => {
   const document = extractDocument("<img src='/photo.png' alt='A portrait'>", 'html', 'photo');
   assert.equal(

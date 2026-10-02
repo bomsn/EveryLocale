@@ -64,10 +64,12 @@ function renderSpans(content: string, spans: Span[], translations: Record<string
     const translated = translations[span.id];
     if (translated === undefined)
       throw new ContractError('missing_translation', `Missing approved translation: ${span.id}`);
+    for (const token of Object.keys(span.tokens ?? {})) {
+      if (translated.split(token).length !== 2)
+        throw new ContractError('protected_markup', `Markup token changed in ${span.id}`);
+    }
     let value = span.escape ? escapeHtml(translated) : translated;
     for (const [token, raw] of Object.entries(span.tokens ?? {})) {
-      if (value.split(token).length !== 2)
-        throw new ContractError('protected_markup', `Markup token changed in ${span.id}`);
       value = value.replace(token, raw);
     }
     result = result.slice(0, span.start) + value + result.slice(span.end);
@@ -382,17 +384,25 @@ function markup(
               ? ['comment', node.data]
               : [
                   node.tagName ?? node.nodeName,
+                  // HTML recovery must not hide a moved closing tag. Complete inline code
+                  // elements can still move together when another language changes word order.
+                  Boolean(node.sourceCodeLocation?.startTag),
+                  Boolean(node.sourceCodeLocation?.endTag),
                   (node.attrs ?? []).map((attr: any) => [
                     attr.name,
                     ['alt', 'title', 'aria-label', 'placeholder'].includes(attr.name)
                       ? ''
                       : attr.value,
                   ]),
-                  (node.childNodes ?? []).map(signature),
+                  // Articles and spaces can disappear around inline tags in another language.
+                  // Preserve the element/comment skeleton, rather than translatable text-node positions.
+                  (node.childNodes ?? [])
+                    .filter((child: any) => child.nodeName !== '#text')
+                    .map(signature),
                 ];
         if (
-          JSON.stringify(signature(parseFragment(content))) !==
-          JSON.stringify(signature(parseFragment(rendered)))
+          JSON.stringify(signature(parseFragment(content, { sourceCodeLocationInfo: true }))) !==
+          JSON.stringify(signature(parseFragment(rendered, { sourceCodeLocationInfo: true })))
         )
           throw new ContractError('protected_markup', 'Translation changes HTML structure', 422);
       }
