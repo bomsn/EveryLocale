@@ -2,7 +2,7 @@
 
 Self-hosted AI localization for applications and content.
 
-[everylocale.com](https://everylocale.com) · Website coming soon.
+[everylocale.com](https://everylocale.com)
 
 Translate message catalogs and documents with cloud or local models. EveryLocale validates translations, runs independent AI review, and exports approved revisions. Choose automatic approval or a human review gate for each project.
 
