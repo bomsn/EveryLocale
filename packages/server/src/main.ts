@@ -3,11 +3,9 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { TranslationWorker } from './worker.js';
 import { DeliveryWorker } from './delivery.js';
-import { resolve } from 'node:path';
+import { databasePath } from './paths.js';
 
-const store = new SqliteStore(
-  resolve(process.env.EVERYLOCALE_DATABASE ?? '../../data/everylocale.sqlite'),
-);
+const store = new SqliteStore(databasePath());
 const config = loadConfig(store);
 const app = await createApp(store, { ...config, providersReady: Boolean(config.worker) });
 const worker = config.worker ? new TranslationWorker(store, config.worker) : null;

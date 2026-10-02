@@ -2,6 +2,7 @@
 import { resolve } from 'node:path';
 import { access } from 'node:fs/promises';
 import { SqliteStore } from '@everylocale/store';
+import { databasePath } from './paths.js';
 
 const [command, ...args] = process.argv.slice(2);
 const option = (name: string) => {
@@ -21,9 +22,9 @@ async function run() {
   const database =
     command === 'restore'
       ? required('input')
-      : resolve(
-          option('database') ?? process.env.EVERYLOCALE_DATABASE ?? 'data/everylocale.sqlite',
-        );
+      : option('database')
+        ? resolve(option('database')!)
+        : databasePath();
   await access(database);
   const store = new SqliteStore(database);
   try {

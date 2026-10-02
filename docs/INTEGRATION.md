@@ -1,5 +1,18 @@
 # Runtime integration
 
+This guide is for the developer who makes an app display its prepared translations. Complete [the first translation](GETTING-STARTED.md), then follow [package installation and a first React message](CONNECT.md#react-remix-and-nextjs) before implementing the routing below.
+
+The request decides which language file to use. For example, `/de/pricing` must show German when shared with an English-speaking account. A private dashboard follows the person's saved choice instead. Your server and browser must use the same approved file for a page, so it does not appear in one language and switch during loading.
+
+## Choose the integration you need
+
+- **Existing localization library:** use the CLI to render files in your app's current format. You do not need EveryLocale's React runtime.
+- **React interface:** display declared messages with `EveryLocaleProvider` and `Message`; choose the approved catalog on the server.
+- **Remix or Next.js public pages:** add locale-aware routes and metadata to the same server rendering path.
+- **Content pages:** record which translated pages are published and use that record for navigation and search metadata.
+
+The following sections explain the helpers and the host application's responsibilities. Keep account storage and deployment in the application that already owns them.
+
 ## React
 
 Mount `EveryLocaleProvider` with the catalog chosen on the server for that request. Serialize that exact catalog into the hydration data; avoid a second browser-side language decision. Use `Message` or `useEveryLocale` for explicit ICU declarations.

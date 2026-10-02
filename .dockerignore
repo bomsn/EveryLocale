@@ -17,3 +17,8 @@ docs/*
 !docs/CONNECT.md
 !docs/INTEGRATION.md
 !docs/CONFIGURATION.md
+!docs/CI-CD.md
+!docs/GETTING-STARTED.md
+!docs/WORKFLOW.md
+!docs/CLI.md
+!docs/OPERATIONS.md

@@ -994,7 +994,7 @@ function renderIntegration() {
       steps: [
         [
           'Install the connector',
-          'Copy adapters/wordpress into wp-content/plugins/everylocale and activate EveryLocale. See adapters/wordpress/README.md.',
+          'Copy adapters/wordpress/everylocale into wp-content/plugins/everylocale and activate EveryLocale. Follow the WordPress setup guide.',
         ],
         [
           'Connect in WordPress settings',
@@ -1022,7 +1022,11 @@ function renderIntegration() {
   });
   const help = element('p', undefined, 'guide-links');
   for (const [slug, title] of [
+    ['getting-started', 'Translate your first file'],
+    ['workflow', 'How it works'],
     ['connect', 'Complete setup guide'],
+    ['ci-cd', 'GitHub Actions'],
+    ['operations', 'Hosting and recovery'],
     ['integration', 'Runtime integration'],
     ['api', 'API reference'],
   ]) {
@@ -1392,6 +1396,28 @@ $('#import-file').addEventListener('change', async () => {
     $('#namespace').value = file.name.replace(/\.[^.]+$/, '');
   }
 });
+$('#use-sample').addEventListener('click', () =>
+  guarded(async () => {
+    if (
+      $('#content').value.trim() &&
+      !(await askDecision({
+        title: 'Replace this content with the sample?',
+        message: 'The text in this import form will be replaced. Imported documents are unchanged.',
+        accept: 'Use sample',
+      }))
+    )
+      return;
+    const response = await fetch('/assets/guides/examples/messages.json');
+    if (!response.ok)
+      throw new Error(
+        'The sample is unavailable. Choose examples/messages.json from your checkout.',
+      );
+    $('#content').value = JSON.stringify(await response.json(), null, 2);
+    $('#namespace').value = 'messages';
+    $('#format').value = 'json';
+    $('#import-file').value = '';
+  }),
+);
 $('#import-form').addEventListener('submit', (event) => {
   event.preventDefault();
   guarded(async () => {

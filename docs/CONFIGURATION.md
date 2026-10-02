@@ -1,5 +1,17 @@
 # Configuration
 
+Start with [Translate your first file](GETTING-STARTED.md) for a complete working setup. This page is the reference for changing that setup. After editing `.env`, run `pnpm doctor` and restart the service.
+
+## Choose a provider
+
+| Setup | What you supply |
+| --- | --- |
+| OpenRouter or a compatible cloud API | The endpoint, API key, model identifier, and current input/output prices for both roles. |
+| A local OpenAI-compatible model server | Its endpoint and model name. Use zero prices only when it is genuinely unmetered. The model must support structured JSON responses. |
+| Optional ChatGPT plan access | An eligible account, explicit sign-in consent, an encryption key, and one of the models returned by that connection. |
+
+**Generation** creates the translation. **Review** checks meaning and wording in a separate request. Both must be configured before translation starts. You may use the same model in two separate requests or different providers for each role. Configure prices independently. Keep keys on the service; app/CI access uses a separate project token.
+
 The service reads environment variables from `.env`. `pnpm run setup` creates the file with random workspace and session credentials. Configuration options are listed in [.env.example](../.env.example).
 
 ## Models

@@ -1,5 +1,11 @@
 # Localization in CI/CD
 
+Start with [a successful manual file translation](CONNECT.md#files-and-builds). CI/CD is your existing process that tests, builds, and deploys the app. Add translation before those steps so the next release includes the latest approved wording in every language.
+
+For example, an English button changes from “Create a project” to “Create your first project.” Your workflow sends that change to EveryLocale, waits for the German translation to pass, downloads the approved language files, then builds the app. If review needs attention, the new release stops and your currently deployed app remains available.
+
+Before using the example below, create the project, configure both models on the service, complete a first translation, and create a token with read/import/translate/export permissions. Your runner must be able to reach the service. Keep the service running outside the temporary CI job.
+
 Run the EveryLocale CLI before application checks and deployment. GitHub Actions, GitLab CI, and other runners with Node.js can use the same commands. A persistent EveryLocale service owns jobs, model credentials, approval policy, and translation memory; the runner needs only a scoped project token.
 
 1. Extract declared messages or a supported document into source units.

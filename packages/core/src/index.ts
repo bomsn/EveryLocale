@@ -7,3 +7,4 @@ export * from './provider.js';
 export * from './pipeline.js';
 export * from './formats.js';
 export * from './preview.js';
+export * from './service-url.js';

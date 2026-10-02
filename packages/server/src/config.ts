@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { databasePath } from './paths.js';
 import { validateProvider, type ProviderConfig } from '@everylocale/core';
 import type { WorkerConfig } from './worker.js';
 import { validateDelivery } from './delivery.js';
@@ -95,7 +95,7 @@ export function loadConfig(store?: SqliteStore) {
     port,
     adminToken,
     sessionSecret,
-    database: resolve(process.env.EVERYLOCALE_DATABASE ?? '../../data/everylocale.sqlite'),
+    database: databasePath(),
     publicOrigin: origin.origin,
     secureCookie: origin.protocol === 'https:',
     worker:

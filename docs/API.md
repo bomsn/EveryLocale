@@ -1,5 +1,11 @@
 # HTTP API v1
 
+Use this reference when writing a server-side integration. For a ready-made file workflow, start with [the CLI guide](CONNECT.md#files-and-builds).
+
+Create the project in the workspace first, then issue a scoped token in **Connect → Manage access**. Send it in `Authorization: Bearer YOUR_PROJECT_TOKEN`. Use HTTPS for remote access and keep the token out of public browser code.
+
+The normal flow is **import text → request translations → wait for approval → download approved output**. Import does not start translation or incur model charges. A job is one segment in one target language. A catalog is a language's approved messages; a document export keeps the original file format. Choose automatic or human approval in the project's settings.
+
 All project endpoints require an owner bearer token or a token scoped to that project. Browser sessions use an HttpOnly signed cookie, the exact configured Origin, and `X-CSRF-Token` for mutations. Tokens and sessions never grant access to another project. Responses use `Cache-Control: no-store`.
 
 The prefix is `/api/v1`. A project identifier contains lowercase letters, digits, underscores, and hyphens.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { resolve } from 'node:path';
+import { databasePath } from './paths.js';
 import { SqliteStore } from '@everylocale/store';
 import { ChatGptConnection } from './chatgpt.js';
 
@@ -8,9 +8,7 @@ const option = (name: string) => {
   const index = args.indexOf(`--${name}`);
   return index < 0 ? undefined : args[index + 1];
 };
-const store = new SqliteStore(
-  resolve(process.env.EVERYLOCALE_DATABASE ?? 'data/everylocale.sqlite'),
-);
+const store = new SqliteStore(databasePath());
 try {
   const connection = new ChatGptConnection(store, process.env.EVERYLOCALE_CHATGPT_SECRET ?? '');
   const account = option('account');

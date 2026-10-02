@@ -70,7 +70,15 @@ export function previewMessage(
 /** Review previews never execute MDX or fetch a source document's external assets.
  * The host additionally puts this semantic fragment in a sandboxed, CSP-restricted frame.
  */
-export function documentPreview(content: string, format: ExtractedDocument['format']): string {
+export function documentPreview(
+  content: string,
+  format: ExtractedDocument['format'],
+  options: {
+    link?: (href: string) => string | null;
+    headingIds?: boolean;
+    focusableCode?: boolean;
+  } = {},
+): string {
   let html = content;
   if (format === 'markdown' || format === 'mdx') {
     const processor = unified().use(remarkParse);
@@ -95,6 +103,9 @@ export function documentPreview(content: string, format: ExtractedDocument['form
     'meta',
     'form',
   ]);
+  const headings = new Map<string, number>();
+  const text = (node: any): string =>
+    node.nodeName === '#text' ? node.value : (node.childNodes ?? []).map(text).join('');
   const sanitize = (node: any) => {
     node.childNodes = (node.childNodes ?? []).flatMap((child: any) => {
       if (child.nodeName === '#text') return [child];
@@ -109,9 +120,31 @@ export function documentPreview(content: string, format: ExtractedDocument['form
         ];
       sanitize(child);
       if (!allowed.has(child.tagName)) return child.childNodes ?? [];
+      const href = child.attrs?.find((attribute: any) => attribute.name === 'href')?.value;
       child.attrs = (child.attrs ?? []).filter((attribute: any) =>
         ['lang', 'dir', 'title', 'colspan', 'rowspan'].includes(attribute.name),
       );
+      if (child.tagName === 'a' && href && options.link) {
+        const destination = options.link(href);
+        if (
+          destination &&
+          /^(?:https?:\/\/|\/(?!\/)|#)/i.test(destination) &&
+          !/[\u0000-\u0020\\]/u.test(destination)
+        )
+          child.attrs.push({ name: 'href', value: destination });
+      }
+      if (/^h[1-6]$/.test(child.tagName) && options.headingIds) {
+        const slug = text(child)
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s-]/gu, '')
+          .trim()
+          .replace(/\s+/g, '-');
+        const count = headings.get(slug) ?? 0;
+        headings.set(slug, count + 1);
+        child.attrs.push({ name: 'id', value: slug + (count ? `-${count}` : '') });
+      }
+      if (child.tagName === 'pre' && options.focusableCode)
+        child.attrs.push({ name: 'tabindex', value: '0' });
       return [child];
     });
   };

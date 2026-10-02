@@ -8,6 +8,7 @@ import {
   DEFAULT_LOCALES,
 } from '@everylocale/core/locales';
 import type { ApprovedCatalog } from '@everylocale/core/types';
+import { serviceUrl } from '@everylocale/core';
 export { PublishedRegistry, type PublishedPage, type PublishedVariant } from './published.js';
 
 export type AdapterOptions = {
@@ -70,15 +71,7 @@ export class EveryLocaleClient {
     private token: string,
     private fetcher: typeof fetch = fetch,
   ) {
-    const url = new URL(baseUrl);
-    if (
-      !['http:', 'https:'].includes(url.protocol) ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    )
-      throw new Error('Invalid service URL');
+    this.baseUrl = serviceUrl(baseUrl);
   }
   async request<T>(
     path: string,

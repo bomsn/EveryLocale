@@ -9,6 +9,7 @@ import {
   validateTranslation,
   approvedCatalogSchema,
   PIPELINE_REVISION,
+  serviceUrl,
   type Project,
   type ApprovedCatalog,
   type ExtractedDocument,
@@ -17,11 +18,15 @@ import {
 import { extractCode } from './extract-code.js';
 import { installBundle, activateBundle } from './bundle.js';
 import { setTimeout as delay } from 'node:timers/promises';
+import { help } from './help.js';
 
 const [command, ...args] = process.argv.slice(2);
 const option = (name: string, fallback?: string) => {
   const index = args.indexOf(`--${name}`);
-  return index >= 0 ? args[index + 1] : fallback;
+  if (index < 0) return fallback;
+  const value = args[index + 1];
+  if (!value || value.startsWith('--')) throw new Error(`--${name} needs a value`);
+  return value;
 };
 const required = (name: string) => {
   const value = option(name);
@@ -36,7 +41,7 @@ async function atomicWrite(path: string, content: string) {
   await rename(temporary, path);
 }
 async function api<T>(path: string, method = 'GET', body?: unknown, key?: string): Promise<T> {
-  const base = option('url', process.env.EVERYLOCALE_URL ?? 'http://localhost:4310')!;
+  const base = serviceUrl(option('url', process.env.EVERYLOCALE_URL ?? 'http://localhost:4310')!);
   const token = process.env.EVERYLOCALE_TOKEN;
   if (!token) throw new Error('Set EVERYLOCALE_TOKEN to a scoped project token');
   const response = await fetch(`${base.replace(/\/$/, '')}/api/v1${path}`, {
@@ -68,6 +73,15 @@ async function filesUnder(directory: string): Promise<string[]> {
   return result;
 }
 async function main() {
+  if (
+    !command ||
+    ['help', '--help', '-h'].includes(command) ||
+    args.includes('--help') ||
+    args.includes('-h')
+  ) {
+    console.log(help(command === 'help' ? args[0] : command));
+    return;
+  }
   if (command === 'extract-code') {
     const units = await extractCode(await filesUnder(resolve(required('input'))));
     const sourceLocale = option('source-locale', 'en')!;
@@ -104,6 +118,15 @@ async function main() {
     return;
   }
   if (command === 'sync') {
+    const timeout = Number(option('timeout', '600'));
+    if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 86400)
+      throw new Error('Timeout must be between 1 and 86400 seconds');
+    const locales = args.includes('--import-only')
+      ? []
+      : required('locales')
+          .split(',')
+          .map((value) => value.trim());
+    if (locales.some((value) => !value)) throw new Error('Provide comma-separated target locales');
     const project = required('project'),
       content = await readFile(resolve(required('input')), 'utf8');
     const units = (JSON.parse(content) as unknown[]).map((x) => unitSchema.parse(x));
@@ -113,9 +136,6 @@ async function main() {
       { units },
     );
     if (!args.includes('--import-only')) {
-      const locales = required('locales')
-        .split(',')
-        .map((x) => x.trim());
       const configuration = await api<Project>(`/projects/${encodeURIComponent(project)}`);
       const submitted = await api<{ records: import('@everylocale/core').TranslationRecord[] }>(
         `/projects/${encodeURIComponent(project)}/jobs`,
@@ -130,9 +150,6 @@ async function main() {
         }),
       );
       if (args.includes('--wait')) {
-        const timeout = Number(option('timeout', '600'));
-        if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 86400)
-          throw new Error('Timeout must be between 1 and 86400 seconds');
         const deadline = Date.now() + timeout * 1000;
         const jobs = submitted.records;
         for (;;) {
@@ -235,9 +252,7 @@ async function main() {
     console.log(`Validated ${units.length} current approved messages.`);
     return;
   }
-  console.log(
-    'EveryLocale commands: extract, extract-code, sync, check, export, pull, rollback, render\nUse --input, --output, --format, --namespace, --project, --locales, --locale, --catalog as appropriate. Authentication reads EVERYLOCALE_TOKEN; endpoint reads EVERYLOCALE_URL. sync --wait waits for approval; pull atomically activates all configured locales.',
-  );
+  console.error(`Unknown command: ${command}. Use pnpm cli help.`);
   if (command && !['help', '--help', '-h'].includes(command)) process.exitCode = 1;
 }
 main().catch((error) => {

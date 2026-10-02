@@ -13,7 +13,7 @@
     "typecheck": "pnpm -r typecheck",
     "ci:host": "pnpm build && pnpm typecheck && pnpm format:check && pnpm test && pnpm release:pack && pnpm test:next",
     "ci:local": "node tools/ci-local.mjs",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=4 tests/*.test.ts",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\" tools tests/*.test.ts packages/server/public examples/next/app",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" tools tests/*.test.ts packages/server/public examples/next/app",
     "test:wordpress": "tsx tools/wordpress-smoke.ts",
@@ -26,6 +26,7 @@
     "chatgpt": "tsx --env-file-if-exists=.env packages/server/src/chatgpt-cli.ts",
     "maintenance": "tsx --env-file-if-exists=.env packages/server/src/maintenance.ts",
     "setup": "node tools/setup.mjs",
+    "doctor": "tsx --env-file-if-exists=.env packages/server/src/doctor.ts",
     "release:pack": "pnpm build && node tools/pack.mjs"
   },
   "devDependencies": {

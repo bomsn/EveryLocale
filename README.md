@@ -1,75 +1,67 @@
 # EveryLocale
 
-Self-hosted AI localization for applications and content.
+Keep your product up to date in every language.
 
-[everylocale.com](https://everylocale.com)
+[everylocale.com](https://everylocale.com) · [Get started](docs/GETTING-STARTED.md) · [Connect your app](docs/CONNECT.md)
 
-Translate message catalogs and documents with cloud or local models. EveryLocale validates translations, runs independent AI review, and exports approved revisions. Choose automatic approval or a human review gate for each project.
+EveryLocale translates the text you change, checks the result with a separate AI review, and gives your app a complete set of approved translations. Run it on your own computer or server, choose your models, and decide whether clean translations publish automatically or wait for a person.
 
 ![EveryLocale workspace showing language coverage for an example website](assets/screenshots/workspace.jpg)
 
-## Features
+## How it fits into your work
 
-- JSON, YAML, PO, Markdown, MDX, and HTML/Gutenberg support.
-- ICU messages, plural forms, placeholders, glossary terms, and markup validation.
-- Incremental translation, translation memory, spending limits, and durable SQLite jobs.
-- Atomic catalog delivery, retained release rollback, online backups, and durable exception webhooks.
-- A review workspace with comparison, editing, document previews, and batch approval.
-- CLI, HTTP API, React components, Remix and Next.js adapters, and a WordPress connector.
-- Locale routing, published-page metadata, reciprocal `hreflang`, and sitemaps.
+You write “Create a project” in your app's English messages file. EveryLocale prepares the other languages and protects variables, links, numbers, and formatting. Your build downloads the approved files and includes them in the next release. Visitors read those files; displaying a page does not make an AI request.
 
-## Quick start
+The next time you change the wording, run the same workflow. Unchanged translations are reused. If a model request fails or a translation needs attention, the current app stays available while you resolve the issue.
 
-Requires Node.js 22.16 or newer and pnpm 9.15.9. SQLite requires a native build toolchain when a prebuilt binary is unavailable.
+## Try your first translation
+
+You'll need Node.js 22.16 or later and pnpm 9.15.9. Start with the [step-by-step guide](docs/GETTING-STARTED.md): it includes model settings, a sample file, the buttons to use, and the translated file you should get back.
 
 ```sh
-git clone https://github.com/bomsn/EveryLocale.git
+git clone --branch develop https://github.com/bomsn/EveryLocale.git
 cd EveryLocale
 pnpm install --frozen-lockfile
 pnpm build
 pnpm run setup
-pnpm start
 ```
 
-Open [localhost:4310](http://localhost:4310) and sign in with `EVERYLOCALE_ADMIN_TOKEN` from `.env`.
+Add your model settings to the generated `.env`, run `pnpm doctor` to check the configuration, then `pnpm start`. Open [localhost:4310](http://localhost:4310). The guide explains where to find your workspace sign-in token.
 
-Configure generation and review models in `.env`, then create a project, import content, and translate it. Model credentials stay on the server. In automatic mode, translations that pass validation and AI review become approved; flagged translations appear in Review. Human mode requires approval in the workspace.
+## Choose what to translate
 
-Use OpenRouter, another compatible cloud endpoint, or a local model. Eligible self-hosted installations can also configure optional [Sign in with ChatGPT](docs/CONFIGURATION.md#optional-chatgpt-plan-connection), using the account's plan allowance. Generation and review are configured independently.
+- App messages: JSON, YAML, PO, and declared React/ICU messages.
+- Written content: Markdown, MDX, HTML, and WordPress articles.
+- Your release process: CLI commands for GitHub Actions or another CI runner, plus a server-side HTTP API.
+- Your interface: React controls and request helpers for Remix 2 and Next.js, with Arabic direction, native language names, and multilingual SEO helpers.
 
-## Docker
+English, Arabic, Taiwan Chinese, German, Spanish, and French are included in the default locale registry. You can configure additional target languages. Your app still needs to render translated messages and provide localized routes; the [connection guide](docs/CONNECT.md) shows where that work belongs.
 
-Create `.env` with `pnpm run setup`, then run:
+## When a translation needs attention
 
-```sh
-docker compose up --build -d
-```
-
-The service listens on localhost and stores its database in the `everylocale-data` volume. See [configuration](docs/CONFIGURATION.md) for model endpoints, authentication, remote access, and backups.
-
-## Languages
-
-The default registry includes English, Arabic, Traditional Chinese for Taiwan, German, Spanish, and French. Add other locales through the locale registry.
-
-Public URLs select the page language. Private interfaces use the account preference, explicit cookie preference, then English. React components provide native language labels, SVG flags, and a dismissible browser-language suggestion.
-
-## Documentation
-
-- [Configure the service](docs/CONFIGURATION.md)
-- [Connect an application](docs/CONNECT.md)
-- [Runtime and SEO integration](docs/INTEGRATION.md)
-- [HTTP API](docs/API.md)
-- [WordPress connector](adapters/wordpress/README.md)
-- [Contributing](CONTRIBUTING.md)
-
-## Review workspace
-
-Compare source and translation, see validation findings, and refine the wording. Projects with a human review gate approve each exact revision before export.
+The review workspace shows the original, the translation, and what the checks found. Edit the wording and send it through review again. Approval applies to that exact wording and source version. Choose a human approval gate if a person should check every translation.
 
 ![Arabic translation comparison in the optional human review workflow](assets/screenshots/review.jpg)
 
-Screenshots show fictional example content.
+Screenshots use fictional example content.
 
-## License
+## Guides
 
-[MIT](LICENSE). Translation API and hosting costs depend on your setup. Bundled flags and fonts include their upstream licenses.
+| You want to… | Start here |
+| --- | --- |
+| Translate your first file | [Get started](docs/GETTING-STARTED.md) |
+| Understand approvals, changes, and spending | [How the workflow works](docs/WORKFLOW.md) |
+| Use translations in an app | [Connect your app](docs/CONNECT.md) |
+| Translate during a release | [GitHub Actions and CI/CD](docs/CI-CD.md) |
+| Look up a command | [CLI reference](docs/CLI.md) |
+| Set up models or optional ChatGPT access | [Configuration](docs/CONFIGURATION.md) |
+| Run a dependable service | [Hosting, backups, and alerts](docs/OPERATIONS.md) |
+| Implement routing and search metadata | [Runtime integration](docs/INTEGRATION.md) |
+| Build your own integration | [HTTP API](docs/API.md) |
+| Connect a WordPress site | [WordPress setup](adapters/wordpress/README.md) |
+
+## Cost and license
+
+EveryLocale is [MIT-licensed](LICENSE), with no subscription or seat charge. Cloud model requests and hosting are billed by the providers you choose. Local models use your hardware. Set a project spending limit before translating; generation and review both count toward it. Optional ChatGPT access is subject to OpenAI's eligibility and account limits.
+
+Bundled flags and fonts include their upstream licenses. See [Contributing](CONTRIBUTING.md) to contribute.
