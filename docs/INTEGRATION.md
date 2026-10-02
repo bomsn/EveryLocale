@@ -6,6 +6,14 @@ Mount `EveryLocaleProvider` with the catalog chosen on the server for that reque
 
 `LanguageSelector` receives `locale`, `onChange`, and optional trusted `country`. The callback saves an explicit account/cookie preference and navigates to a published counterpart. `LanguageSuggestion` reads browser preferences after hydration and offers a dismissible suggestion. `LocaleFlag` embeds SVG assets. For Arabic, set direction on the HTML document and use logical CSS properties in layouts. Use `isolateIdentifier` or `<bdi dir="auto">` around mixed-direction identifiers. Use fonts with Arabic and CJK coverage in browser screens, PDF generation, emails, and exports.
 
+Localize control copy through the same approved catalog as the application. `LanguageSelector` accepts `label` and `errorMessage`. `LanguageSuggestion` accepts `labels` with `suggestion`, `dismiss`, `dismissAriaLabel`, and a `useLanguage(languageName)` renderer. That renderer can use a rich ICU message; its language-name argument already carries language and direction isolation. Omitted labels use English defaults.
+
+## Arabic and Taiwan Chinese fonts
+
+Import `@everylocale/react/fonts.css` for optional, self-hosted Noto Sans Arabic and Noto Sans TC coverage. Set the document or translated element's `lang` to `ar` or `zh-Hant-TW`. The full Taiwan font is about 5.4 MB; it is a separate asset and loads only where used. A host can instead supply its own appropriately licensed fonts or subsets. Font licenses ship beside the assets.
+
+For browser-generated PDF reports, load the selected fonts and await `document.fonts.ready` before exporting. Preserve `lang`, `dir`, logical layout, and `<bdi>` boundaries in the report template. For a native PDF renderer, use compatible font files and an Arabic shaping/bidirectional engine; font coverage alone does not implement shaping. Verify the actual host renderer's output, including embedded fonts and copied text.
+
 ## Remix 2
 
 A loader resolves `resolveRequest(request, {profileLocale,privateSurface})`. Public pages select catalog by URL; authenticated private surfaces use account preference, then explicit cookie, then English. Set `<html lang={locale} dir={direction}>` in the root. Pass `remixMeta(origin, publishedPaths, locale)` to the route's metadata and combine localized title/description/structured data from the published registry.

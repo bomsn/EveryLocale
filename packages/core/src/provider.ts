@@ -8,6 +8,10 @@ export type ProviderConfig = {
   outputPrice: number;
   maxOutputTokens?: number;
   beforeRequest?: (signal?: AbortSignal) => Promise<void>;
+  reasoningEffort?: string;
+  transport?: (system: string, payload: unknown, signal?: AbortSignal) => Promise<ModelResult>;
+  onUsage?: (result: ModelResult) => void;
+  available?: () => boolean;
 };
 export type ModelResult = {
   value: unknown;
@@ -53,6 +57,13 @@ export function validateProvider(config: ProviderConfig): void {
     config.outputPrice < 0
   )
     throw new Error('Model and explicit nonnegative prices are required');
+  if (
+    config.maxOutputTokens !== undefined &&
+    (!Number.isInteger(config.maxOutputTokens) ||
+      config.maxOutputTokens < 128 ||
+      config.maxOutputTokens > 32768)
+  )
+    throw new Error('Output token limit must be between 128 and 32768');
 }
 export function reservation(config: ProviderConfig, system: string, payload: unknown): number {
   const input = Buffer.byteLength(system + JSON.stringify(payload), 'utf8') + 2048;
@@ -66,6 +77,11 @@ export async function modelCall(
 ): Promise<ModelResult> {
   validateProvider(config);
   await config.beforeRequest?.(signal);
+  if (config.transport) {
+    const result = await config.transport(system, payload, signal);
+    config.onUsage?.(result);
+    return result;
+  }
   const timeout = AbortSignal.timeout(55000);
   let response: Response;
   try {
@@ -86,6 +102,7 @@ export async function modelCall(
         temperature: 0,
         max_tokens: config.maxOutputTokens ?? 4096,
         response_format: { type: 'json_object' },
+        ...(config.reasoningEffort ? { reasoning_effort: config.reasoningEffort } : {}),
       }),
     });
   } catch {
@@ -150,10 +167,12 @@ export async function modelCall(
   } catch {
     throw new ProviderError('Model returned invalid JSON', false, 0, false, costUsd);
   }
-  return {
+  const result = {
     value,
     costUsd,
     inputTokens: usage?.prompt_tokens ?? 0,
     outputTokens: usage?.completion_tokens ?? 0,
   };
+  config.onUsage?.(result);
+  return result;
 }

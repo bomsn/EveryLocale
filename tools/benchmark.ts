@@ -31,10 +31,15 @@ function provider(prefix: string): ProviderConfig {
     apiKey: process.env[`${prefix}_KEY`],
     inputPrice: Number(prices[0]),
     outputPrice: Number(prices[1]),
+    maxOutputTokens: Number(process.env[`${prefix}_MAX_OUTPUT_TOKENS`] ?? 4096),
+    reasoningEffort: process.env[`${prefix}_REASONING_EFFORT`],
+    onUsage: (result: import('../packages/core/dist/index.js').ModelResult) =>
+      usage.push({ model: process.env[`${prefix}_MODEL`], ...result }),
   };
   validateProvider(config);
   return config;
 }
+let usage: unknown[] = [];
 const generator = provider('EVERYLOCALE_GENERATOR'),
   reviewer = provider('EVERYLOCALE_REVIEWER');
 const results = [];
@@ -63,6 +68,7 @@ for (const unit of units)
       throw new Error('Benchmark budget cannot cover the next generation and review');
     await save();
     const started = performance.now();
+    usage = [];
     let costUsd = 0;
     let result;
     try {
@@ -92,10 +98,22 @@ for (const unit of units)
       results.push({
         unitId: unit.id,
         locale,
+        source: unit.source,
         error: error instanceof Error ? error.message : 'Benchmark failed',
         costUsd,
+        latencyMs: performance.now() - started,
+        calls: usage,
       });
       await save();
+      // Unmetered comparisons retain every failure rather than hiding difficult cases.
+      if (
+        process.env.EVERYLOCALE_BENCHMARK_CONTINUE === 'true' &&
+        generator.inputPrice === 0 &&
+        generator.outputPrice === 0 &&
+        reviewer.inputPrice === 0 &&
+        reviewer.outputPrice === 0
+      )
+        continue;
       throw error;
     }
     pendingReservation = 0;
@@ -107,6 +125,7 @@ for (const unit of units)
       costUsd,
       latencyMs: performance.now() - started,
       ownerCorrections: null,
+      calls: usage,
     });
     await save();
   }

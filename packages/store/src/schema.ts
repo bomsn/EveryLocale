@@ -57,5 +57,15 @@ CREATE TABLE IF NOT EXISTS translation_memory (
   translation TEXT NOT NULL, findings TEXT NOT NULL, review_summary TEXT NOT NULL,
   PRIMARY KEY(project_id,cache_key)
 );
-PRAGMA user_version = 1;
+CREATE TABLE IF NOT EXISTS delivery_events (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+  project_id TEXT NOT NULL, type TEXT NOT NULL, entity_id TEXT NOT NULL,
+  detail TEXT NOT NULL, created_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+  available_at INTEGER NOT NULL, lease_token TEXT, lease_until INTEGER, error TEXT
+);
+CREATE INDEX IF NOT EXISTS delivery_claim ON delivery_events(status,available_at,seq);
+CREATE TABLE IF NOT EXISTS auth_vault (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS auth_locks (id TEXT PRIMARY KEY, token TEXT NOT NULL, expires_at INTEGER NOT NULL);
+PRAGMA user_version = 3;
 `;

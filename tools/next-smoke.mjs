@@ -73,6 +73,33 @@ try {
   assert.match(ar, /hrefLang="zh-Hant-TW"/i);
   assert.match(zh, /hrefLang="ar"/i);
   assert.match(ar, /x-default/);
+  const stylesheets = [...ar.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map((match) => match[1]);
+  assert.ok(stylesheets.length, 'The packaged font stylesheet must be delivered');
+  const deliveredFonts = new Set();
+  for (const href of stylesheets) {
+    const cssUrl = new URL(href, 'http://localhost:4315');
+    const cssResponse = await fetch(cssUrl);
+    assert.equal(cssResponse.status, 200);
+    const css = await cssResponse.text();
+    for (const match of css.matchAll(/url\(([^)]+)\)/g)) {
+      const url = new URL(match[1].trim().replace(/^['"]|['"]$/g, ''), cssUrl);
+      if (!url.pathname.endsWith('.woff2')) continue;
+      assert.equal(url.origin, 'http://localhost:4315');
+      const font = await fetch(url);
+      assert.equal(font.status, 200);
+      assert.equal(
+        Buffer.from(await font.arrayBuffer())
+          .subarray(0, 4)
+          .toString(),
+        'wOF2',
+      );
+      deliveredFonts.add(url.href);
+    }
+  }
+  assert.ok(
+    deliveredFonts.size >= 3,
+    'Arabic, full Taiwan and Taiwan label fonts must be packaged',
+  );
   const unavailable = await fetch('http://localhost:4315/fr/about');
   assert.equal(unavailable.status, 404);
   assert.match(await unavailable.text(), /Read the original page/);

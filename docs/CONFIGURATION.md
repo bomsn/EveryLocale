@@ -16,6 +16,24 @@ Configure generation and review independently. Each provider uses an OpenAI-comp
 
 Use the prefixes `EVERYLOCALE_GENERATOR` and `EVERYLOCALE_REVIEWER`. Both models must support JSON object responses. Metered endpoints must report token usage; set both prices to zero for an unmetered local model.
 
+### Optional ChatGPT plan connection
+
+Eligible self-hosted installations can use **Continue with ChatGPT** instead of an API key. OpenAI determines account and integration eligibility. Plan usage consumes the account's allowance; manage app limits and credit permissions in [ChatGPT settings](https://chatgpt.com/settings/usage).
+
+Generate an independent encryption key:
+
+```sh
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Save it as `EVERYLOCALE_CHATGPT_SECRET` in `.env`, then run `pnpm chatgpt connect` on the computer running EveryLocale. Open the official authorization link and grant permission. The command lists the account's available models. Credentials are encrypted in SQLite; keep the encryption key with protected backups.
+
+For each role using the connection, set `_PROVIDER=chatgpt`, `_ACCOUNT` to the saved issued account ID, and `_MODEL` to a discovered model. For example, use `EVERYLOCALE_GENERATOR_PROVIDER`, `EVERYLOCALE_GENERATOR_ACCOUNT`, and `EVERYLOCALE_GENERATOR_MODEL`. Generation and review can use different providers. Restart the service after changing configuration.
+
+`pnpm chatgpt accounts` lists saved registrations. `models --account ID`, `disconnect --account ID`, and `resume --account ID` manage a connection. Disconnect clears local tokens and attempts remote revocation; account registration and host identity remain for later sign-in. Quota and eligibility failures pause new translation requests. Resume only after resolving the applicable limit or permission. Transient failures preserve credentials and use bounded retries. There is no automatic paid fallback.
+
+Run GitHub Actions against a persistent EveryLocale service with a scoped project token. Keep ChatGPT refresh credentials on that service. Ephemeral runners are unsuitable for rotating sessions. For a remote host, establish `ssh -L 1455:127.0.0.1:1455 user@host` from your computer, then run `pnpm chatgpt connect --callback-port 1455` on that host. Open its sign-in link in your local browser. The protected tunnel delivers the loopback callback to the service; do not expose it publicly. Commercial or remotely hosted offerings must verify the applicable [OpenAI eligibility](https://developers.openai.com/siwc/token-sharing-open-source).
+
 `EVERYLOCALE_CONCURRENCY` limits active jobs. `EVERYLOCALE_PROVIDER_INTERVAL_MS` sets the minimum interval between provider requests. Each project has a cumulative USD budget covering generation and review.
 
 ## Access
@@ -32,4 +50,20 @@ The default host is `127.0.0.1`, with port `4310`. For remote access, configure 
 
 ## Backups
 
-Use SQLite's backup API for a live database. Alternatively, stop the service and copy the database with its WAL files. Preserve the Docker volume during upgrades and test restoration before relying on a backup.
+From the checkout, create a consistent online backup without stopping the service:
+
+```sh
+pnpm maintenance backup --database data/everylocale.sqlite --output data/backups/snapshot.sqlite
+pnpm maintenance check --database data/backups/snapshot.sqlite
+pnpm maintenance restore --input data/backups/snapshot.sqlite --output data/restored.sqlite
+```
+
+Destinations must be new files. A backup includes the live WAL state, approvals, spending, tokens, jobs, publications, and pending delivery. For recovery, stop the service, set `EVERYLOCALE_DATABASE` to the verified restored file, and start it. Retain the same secrets, including any ChatGPT encryption key. Protect backups as production data and store a copy away from the service host. Expired worker leases recover conservatively; uncertain inference may already have incurred charges. Publication notifications can be redelivered after restoration, so receivers must deduplicate event IDs.
+
+## Exception notifications
+
+Set `EVERYLOCALE_WEBHOOK_URL` and an independent `EVERYLOCALE_WEBHOOK_SECRET` of at least 32 characters. The receiver gets publication changes, exhausted budgets, failed jobs, and blocked automatic reviews. Events persist with the underlying change, retry with backoff, and retain a stable ID. After eight failed deliveries, owner operations show a dead delivery that can be retried after fixing the receiver.
+
+Verify `X-EveryLocale-Signature` as hex HMAC-SHA256 of `X-EveryLocale-Timestamp + '.' + raw request body`; compare safely and reject timestamps more than five minutes old. Deduplicate `X-EveryLocale-Event-Id`, processing each event once. A successful response is any HTTP 2xx. Notification detail excludes source text and credentials. Connect your own email, chat, or monitoring relay to this endpoint. Monitor authenticated `/api/v1/operations` for queue age, failures, spending, and dead deliveries; use `/health` for liveness.
+
+The service checks queue health every 30 seconds. Pending work with unavailable providers emits `alert.provider_unavailable`; work pending for 15 minutes emits `alert.queue_stalled`. Unresolved conditions repeat at most hourly per project, with suppression retained across restarts. A growing queue can trigger a stalled alert even when some work is progressing; inspect queue age and throughput before changing concurrency. Use an external uptime monitor for host outages, when the service cannot send its own notifications.

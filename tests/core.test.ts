@@ -150,9 +150,24 @@ test('ICU validation protects variables and requires all Arabic plural categorie
 test('Traditional Chinese checks surface script problems', () => {
   const source = unitSchema.parse({ id: 'save', source: 'Save settings' });
   assert.ok(
-    validateTranslation(source, '保存设置', 'zh-Hant-TW').some((x) => x.code === 'chinese_script'),
+    validateTranslation(source, '保存设置', 'zh-Hant-TW').some(
+      (x) => x.code === 'chinese_script' && x.severity === 'critical',
+    ),
   );
   assert.deepEqual(validateTranslation(source, '儲存設定', 'zh-Hant-TW'), []);
+  const variants = validateTranslation(source, '設定已儲存。核准後在平台發布。', 'zh-Hant-TW');
+  assert.ok(variants.every((finding) => finding.severity === 'minor'));
+  assert.ok(
+    validateTranslation(source, '設定', 'zh-Hant-TW').every(
+      (finding) => finding.severity !== 'critical',
+    ),
+  );
+  const protectedSource = { ...source, source: 'Keep 设置 unchanged', protectedTerms: ['设置'] };
+  assert.ok(
+    validateTranslation(protectedSource, '保留 设置 不變', 'zh-Hant-TW').every(
+      (finding) => finding.code !== 'chinese_script',
+    ),
+  );
 });
 test('PO catalogs render target plural forms without deleting metadata', () => {
   const source =

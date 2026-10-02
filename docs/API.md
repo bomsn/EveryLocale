@@ -36,6 +36,10 @@ The prefix is `/api/v1`. A project identifier contains lowercase letters, digits
 
 `GET /health` is unauthenticated liveness. `GET /api/v1/locales` returns the public presentation registry. The review workspace is `/`.
 
+`GET /projects/{project}/bundle?current=true` requires export permission and returns every configured locale from one database snapshot. Its revision checksums the complete bundle. Each constituent catalog retains its own checksum and source revisions.
+
+Owner-only operations: `GET /operations` reports queue age, failures, spending, and delivery status; `POST /deliveries/{id}/retry` retries a dead delivery. `GET /chatgpt/accounts`, `GET /chatgpt/accounts/{id}/models`, and `POST /chatgpt/accounts/{id}/disconnect` manage the optional ChatGPT provider. Account responses contain labels and connection state, never credentials. Browser mutations require Origin and CSRF protection.
+
 ## Source unit
 
 ```json

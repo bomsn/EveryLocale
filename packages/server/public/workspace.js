@@ -17,6 +17,8 @@ const state = {
   dirty: false,
   view: 'overview',
   summary: null,
+  operations: null,
+  providerAccounts: null,
   batch: false,
   integration: 'cli',
 };
@@ -82,6 +84,12 @@ function element(tag, text, className) {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
   if (className) node.className = className;
+  return node;
+}
+function nativeLanguage(locale, tag = 'bdi') {
+  const node = element(tag, names[locale]);
+  node.lang = locale;
+  node.dir = 'auto';
   return node;
 }
 function actionButton(text, className, name = 'arrow-right', leading = false) {
@@ -189,7 +197,7 @@ function localeLabel(locale) {
     wrapper.append(flag);
   }
   const copy = element('div');
-  copy.append(element('strong', names[locale]), element('small', locale));
+  copy.append(nativeLanguage(locale, 'strong'), element('small', locale));
   wrapper.append(copy);
   return wrapper;
 }
@@ -270,7 +278,7 @@ async function selectProject() {
     const existing = $('#' + id).value;
     $('#' + id).replaceChildren(
       ...state.project.targetLocales.map((locale) => {
-        const option = element('option', names[locale]);
+        const option = nativeLanguage(locale, 'option');
         option.value = locale;
         return option;
       }),
@@ -310,14 +318,19 @@ async function refresh(append = false) {
   if ($('#status').value) params.set('status', $('#status').value);
   if ($('#search').value.trim()) params.set('search', $('#search').value.trim());
   if (append && state.cursor) params.set('cursor', state.cursor);
-  const [allProjects, data, summary] = await Promise.all([
+  const [allProjects, data, summary, operations, providerAccounts] = await Promise.all([
     api('/projects'),
     api(path('/jobs?' + params)),
     api(path('/summary')),
+    state.session?.owner ? api('/operations') : Promise.resolve(null),
+    state.session?.owner ? api('/chatgpt/accounts') : Promise.resolve(null),
   ]);
   state.projects = allProjects;
   state.project = allProjects.find((project) => project.id === state.project.id) ?? state.project;
   state.summary = summary;
+  state.operations = operations;
+  state.providerAccounts = providerAccounts;
+  renderProviderAccounts();
   state.filters = filters;
   $('#budget').textContent =
     '$' +
@@ -389,14 +402,57 @@ function renderOverview() {
     ),
   );
   policy.replaceChildren(icon(automatic ? 'refresh' : 'shield'), policyCopy);
+  const operations = $('#operations-notice');
+  const service = state.operations?.projects.find((project) => project.id === state.project?.id);
+  const dead = state.operations?.delivery.dead ?? 0;
+  const stalled = service?.oldestPendingAt && Date.now() - service.oldestPendingAt > 900000;
+  operations.hidden = !(service?.failed || dead || stalled);
+  if (!operations.hidden) {
+    const copy = element('div');
+    const heading = element('h2', 'Some work needs attention');
+    heading.id = 'operations-title';
+    copy.append(
+      heading,
+      element(
+        'p',
+        `${service?.failed ?? 0} failed translations. ${dead} notifications need a delivery retry.${stalled ? ' Some translations have been queued for more than 15 minutes.' : ''}`,
+      ),
+    );
+    const open = actionButton('View failed translations', 'text-button', 'arrow-right');
+    open.addEventListener('click', () =>
+      guarded(async () => {
+        $('#status').value = 'failed';
+        $('#language').value = '';
+        await refresh();
+        await showView('review');
+      }),
+    );
+    copy.append(open);
+    if (dead && state.session?.owner) {
+      const retry = actionButton('Retry failed notifications', 'text-button', 'refresh');
+      retry.addEventListener('click', () =>
+        guarded(async () => {
+          const events = (state.operations?.events ?? []).filter(
+            (event) => event.status === 'dead',
+          );
+          for (const event of events)
+            await api('/deliveries/' + encodeURIComponent(event.id) + '/retry', 'POST', {});
+          await refresh();
+          notify(`${events.length} notifications queued for another delivery attempt.`);
+        }),
+      );
+      copy.append(retry);
+    }
+    operations.replaceChildren(icon('shield'), copy);
+  }
   $('#provider-notice').textContent = state.session?.providersReady
     ? automatic
       ? 'Clean AI-reviewed revisions are approved automatically. You can inspect or correct them at any time.'
       : 'Translations follow your human review gate before export.'
     : 'Configure generation and review providers on the server to enable translation.';
-  $('#source-description').textContent = state.project
-    ? 'Original: ' + names[state.project.sourceLocale]
-    : '';
+  $('#source-description').replaceChildren(
+    ...(state.project ? ['Original: ', nativeLanguage(state.project.sourceLocale)] : []),
+  );
   const container = $('#language-coverage');
   container.replaceChildren();
   for (const language of languages) {
@@ -552,7 +608,7 @@ function renderDetail() {
     $('#search').focus();
   });
   const top = element('div', undefined, 'detail-top'),
-    heading = element('h2', names[job.locale]);
+    heading = nativeLanguage(job.locale, 'h2');
   heading.id = 'detail-heading';
   heading.tabIndex = -1;
   top.append(heading, element('span', statuses[job.status], 'badge ' + job.status));
@@ -566,7 +622,8 @@ function renderDetail() {
     original = element('div'),
     target = element('div'),
     label = element('label', 'Translation');
-  const originalLabel = element('label', 'Original · ' + names[job.source.sourceLocale]);
+  const originalLabel = element('label', 'Original · ');
+  originalLabel.append(nativeLanguage(job.source.sourceLocale));
   const source = element(
     'div',
     displaySource(job.source.source, job.source.context),
@@ -816,6 +873,7 @@ function codeBlock(code) {
   const wrapper = element('div', undefined, 'code-block'),
     pre = element('pre', code),
     copy = actionButton('Copy', 'copy-button', 'copy', true);
+  pre.tabIndex = 0;
   copy.setAttribute('aria-label', 'Copy setup example');
   copy.addEventListener('click', async () => {
     try {
@@ -831,6 +889,7 @@ function codeBlock(code) {
 function renderIntegration() {
   const project = state.project?.id ?? 'your-project',
     locale = state.project?.targetLocales[0] ?? 'ar',
+    locales = state.project?.targetLocales.join(',') || 'ar,zh-Hant-TW,de,es,fr',
     container = $('#integration-guide');
   container.replaceChildren();
   const guides = {
@@ -845,20 +904,18 @@ function renderIntegration() {
           'pnpm cli extract --input ./messages.json --format json --namespace app --output ./source.json',
         ],
         [
-          'Sync to your project',
-          'Set EVERYLOCALE_URL to this service and EVERYLOCALE_TOKEN to a project token. Sync queues translation using your configured models.',
-          'pnpm cli sync --project ' + project + ' --input ./source.json --locales ' + locale,
+          'Sync and wait for approved translations',
+          'Set EVERYLOCALE_URL and a scoped EVERYLOCALE_TOKEN in your environment. Clean translations approve automatically. Flagged or human-gated work pauses here for review.',
+          'pnpm cli sync --project ' +
+            project +
+            ' --input ./source.json --locales ' +
+            locales +
+            ' --wait --timeout 600',
         ],
         [
-          'Approve according to your project rules, then export',
-          'Automatic mode approves clean AI-reviewed translations. Human mode waits for you in Review. Export requires an approved current revision.',
-          'pnpm cli export --project ' +
-            project +
-            ' --locale ' +
-            locale +
-            ' --output ./locales/' +
-            locale +
-            '.json',
+          'Deliver all languages as one release',
+          'Pull verifies complete current approvals and switches locales/current.json atomically. Read that pointer once per build. Keep previous releases for rollback.',
+          'pnpm cli pull --project ' + project + ' --output ./locales',
         ],
       ],
     },
@@ -978,6 +1035,71 @@ function renderIntegration() {
   }
   container.append(help);
 }
+
+function renderProviderAccounts() {
+  const container = $('#chatgpt-connections');
+  const accounts = state.providerAccounts?.accounts ?? [];
+  container.hidden = !accounts.length;
+  container.replaceChildren();
+  if (!accounts.length) return;
+  const intro = element('div');
+  const heading = element('h2', 'ChatGPT plan connection');
+  heading.id = 'chatgpt-heading';
+  intro.append(
+    heading,
+    element(
+      'p',
+      'Eligible requests use your ChatGPT plan allowance. Other configured providers keep their own budgets.',
+      'small',
+    ),
+  );
+  const usage = element('a', 'Manage usage');
+  usage.href = 'https://chatgpt.com/settings/usage';
+  usage.target = '_blank';
+  usage.rel = 'noopener';
+  usage.setAttribute('aria-label', 'Manage ChatGPT usage (opens a new tab)');
+  intro.append(usage);
+  const controls = element('div', undefined, 'export-controls');
+  for (const account of accounts) {
+    const status = account.paused
+      ? 'Paused. Check usage or reconnect on the service host.'
+      : account.connected && account.enabled
+        ? 'Using your ChatGPT plan'
+        : 'Plan usage is disabled. Connect on the service host to enable it.';
+    const row = element('div');
+    row.append(element('strong', account.label), element('p', status, 'small'));
+    if (account.connected) {
+      const disconnect = actionButton('Disconnect', 'button', 'sign-out');
+      disconnect.addEventListener('click', () =>
+        guarded(async () => {
+          if (
+            !(await askDecision({
+              title: 'Disconnect this ChatGPT account?',
+              message:
+                'Queued work using this account will pause until you reconnect or select another provider.',
+              accept: 'Disconnect',
+            }))
+          )
+            return;
+          const result = await api(
+            '/chatgpt/accounts/' + encodeURIComponent(account.id) + '/disconnect',
+            'POST',
+            {},
+          );
+          await refresh();
+          notify(
+            result.revoked
+              ? 'ChatGPT disconnected.'
+              : 'Local credentials removed. Remote revocation could not be confirmed; review your ChatGPT connections.',
+          );
+        }),
+      );
+      row.append(disconnect);
+    }
+    controls.append(row);
+  }
+  container.append(intro, controls);
+}
 document.querySelectorAll('[data-integration]').forEach((button) =>
   button.addEventListener('click', () => {
     state.integration = button.dataset.integration;
@@ -1081,7 +1203,7 @@ function addTerm(entry = { source: '', keep: true, targets: {} }) {
     ]),
   ];
   for (const locale of locales) {
-    const label = element('label', names[locale]),
+    const label = nativeLanguage(locale, 'label'),
       input = element('input');
     input.id = 'term-' + index + '-' + locale;
     label.htmlFor = input.id;
@@ -1107,15 +1229,16 @@ function setupLanguageFields(project) {
     checkbox.value = locale.id;
     checkbox.checked = selected.includes(locale.id);
     checkbox.disabled = locale.id === $('#source-locale').value;
-    label.append(checkbox, document.createTextNode(locale.label));
+    label.append(checkbox, nativeLanguage(locale.id));
     $('#target-choices').append(label);
   }
   $('#glossary-fields').replaceChildren();
   for (const entry of project?.glossary ?? []) addTerm(entry);
   $('#instruction-fields').replaceChildren();
   for (const locale of [...new Set([...selected, ...Object.keys(project?.instructions ?? {})])]) {
-    const label = element('label', names[locale] + ' guidance'),
+    const label = element('label'),
       input = element('textarea');
+    label.append(nativeLanguage(locale), ' guidance');
     input.id = 'guidance-' + locale;
     label.htmlFor = input.id;
     input.dataset.locale = locale;
@@ -1147,7 +1270,7 @@ async function projectDialog(edit) {
   const source = edit ? state.project.sourceLocale : 'en';
   $('#source-locale').replaceChildren(
     ...[...new Set([...state.locales.map((locale) => locale.id), source])].map((locale) => {
-      const option = element('option', names[locale]);
+      const option = nativeLanguage(locale, 'option');
       option.value = locale;
       return option;
     }),

@@ -15,6 +15,8 @@ import {
   type SourceUnit,
 } from '@everylocale/core';
 import { extractCode } from './extract-code.js';
+import { installBundle, activateBundle } from './bundle.js';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const [command, ...args] = process.argv.slice(2);
 const option = (name: string, fallback?: string) => {
@@ -115,7 +117,7 @@ async function main() {
         .split(',')
         .map((x) => x.trim());
       const configuration = await api<Project>(`/projects/${encodeURIComponent(project)}`);
-      await api(
+      const submitted = await api<{ records: import('@everylocale/core').TranslationRecord[] }>(
         `/projects/${encodeURIComponent(project)}/jobs`,
         'POST',
         { unitIds: units.map((x) => x.id), locales },
@@ -127,6 +129,37 @@ async function main() {
           pipeline: PIPELINE_REVISION,
         }),
       );
+      if (args.includes('--wait')) {
+        const timeout = Number(option('timeout', '600'));
+        if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 86400)
+          throw new Error('Timeout must be between 1 and 86400 seconds');
+        const deadline = Date.now() + timeout * 1000;
+        const jobs = submitted.records;
+        for (;;) {
+          const records: import('@everylocale/core').TranslationRecord[] = [];
+          for (let start = 0; start < jobs.length; start += 16) {
+            if (Date.now() >= deadline)
+              throw new Error('Translation is still pending; synchronization timed out');
+            records.push(
+              ...(await Promise.all(
+                jobs
+                  .slice(start, start + 16)
+                  .map((job) =>
+                    api<import('@everylocale/core').TranslationRecord>(
+                      `/projects/${encodeURIComponent(project)}/jobs/${encodeURIComponent(job.id)}`,
+                    ),
+                  ),
+              )),
+            );
+          }
+          if (records.some((job) => ['failed', 'stale', 'review'].includes(job.status)))
+            throw new Error('Translation requires attention; open the review workspace');
+          if (records.every((job) => job.status === 'approved')) break;
+          if (Date.now() >= deadline)
+            throw new Error('Translation is still pending; synchronization timed out');
+          await delay(1000);
+        }
+      }
     }
     console.log(`${imported.changed.length} changed; ${imported.unchanged.length} unchanged.`);
     return;
@@ -139,6 +172,20 @@ async function main() {
     );
     await atomicWrite(resolve(required('output')), JSON.stringify(catalog, null, 2) + '\n');
     console.log(`Exported approved revision ${catalog.revision}.`);
+    return;
+  }
+  if (command === 'pull') {
+    const project = required('project');
+    const bundle = await api(
+      `/projects/${encodeURIComponent(project)}/bundle?current=${args.includes('--allow-stale') ? 'false' : 'true'}`,
+    );
+    const installed = await installBundle(required('output'), bundle);
+    console.log(`Activated approved release ${installed.revision}.`);
+    return;
+  }
+  if (command === 'rollback') {
+    await activateBundle(required('output'), required('revision'));
+    console.log('Activated the retained release.');
     return;
   }
   if (command === 'render') {
@@ -189,7 +236,7 @@ async function main() {
     return;
   }
   console.log(
-    'EveryLocale commands: extract, extract-code, sync, check, export, render\nUse --input, --output, --format, --namespace, --project, --locales, --locale, --catalog as appropriate. Authentication reads EVERYLOCALE_TOKEN; endpoint reads EVERYLOCALE_URL.',
+    'EveryLocale commands: extract, extract-code, sync, check, export, pull, rollback, render\nUse --input, --output, --format, --namespace, --project, --locales, --locale, --catalog as appropriate. Authentication reads EVERYLOCALE_TOKEN; endpoint reads EVERYLOCALE_URL. sync --wait waits for approval; pull atomically activates all configured locales.',
   );
   if (command && !['help', '--help', '-h'].includes(command)) process.exitCode = 1;
 }

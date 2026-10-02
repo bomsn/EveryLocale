@@ -13,6 +13,7 @@ Translate message catalogs and documents with cloud or local models. EveryLocale
 - JSON, YAML, PO, Markdown, MDX, and HTML/Gutenberg support.
 - ICU messages, plural forms, placeholders, glossary terms, and markup validation.
 - Incremental translation, translation memory, spending limits, and durable SQLite jobs.
+- Atomic catalog delivery, retained release rollback, online backups, and durable exception webhooks.
 - A review workspace with comparison, editing, document previews, and batch approval.
 - CLI, HTTP API, React components, Remix and Next.js adapters, and a WordPress connector.
 - Locale routing, published-page metadata, reciprocal `hreflang`, and sitemaps.
@@ -33,6 +34,8 @@ pnpm start
 Open [localhost:4310](http://localhost:4310) and sign in with `EVERYLOCALE_ADMIN_TOKEN` from `.env`.
 
 Configure generation and review models in `.env`, then create a project, import content, and translate it. Model credentials stay on the server. In automatic mode, translations that pass validation and AI review become approved; flagged translations appear in Review. Human mode requires approval in the workspace.
+
+Use OpenRouter, another compatible cloud endpoint, or a local model. Eligible self-hosted installations can also configure optional [Sign in with ChatGPT](docs/CONFIGURATION.md#optional-chatgpt-plan-connection), using the account's plan allowance. Generation and review are configured independently.
 
 ## Docker
 

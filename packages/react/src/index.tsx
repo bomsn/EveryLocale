@@ -66,12 +66,14 @@ export function LanguageSelector({
   country,
   locales = DEFAULT_LOCALES,
   label = 'Language',
+  errorMessage = 'The language could not be changed. Please try again.',
 }: {
   locale: string;
   onChange: (locale: string) => void | Promise<void>;
   country?: string | null;
   locales?: readonly LocaleDefinition[];
   label?: string;
+  errorMessage?: string;
 }) {
   const id = useId();
   const [pending, setPending] = useState(false),
@@ -92,7 +94,7 @@ export function LanguageSelector({
           try {
             await onChange(target);
           } catch {
-            setError('The language could not be changed. Please try again.');
+            setError(errorMessage);
           } finally {
             setPending(false);
           }
@@ -114,10 +116,17 @@ export function LanguageSuggestion({
   locale,
   onChoose,
   locales = DEFAULT_LOCALES,
+  labels,
 }: {
   locale: string;
   onChoose: (locale: string) => void;
   locales?: readonly LocaleDefinition[];
+  labels?: {
+    suggestion?: string;
+    useLanguage?: (languageName: ReactNode) => ReactNode;
+    dismiss?: string;
+    dismissAriaLabel?: string;
+  };
 }) {
   const [suggestion, setSuggestion] = useState<string | null>(null);
   useEffect(() => {
@@ -129,18 +138,24 @@ export function LanguageSuggestion({
   if (!suggestion) return null;
   const label = locales.find((item) => item.id === suggestion)?.label ?? suggestion;
   return (
-    <aside aria-label="Language suggestion">
-      <span>{label}?</span>{' '}
+    <aside aria-label={labels?.suggestion ?? 'Language suggestion'}>
+      <bdi lang={suggestion}>{label}</bdi>?{' '}
       <button
         onClick={() => {
           onChoose(suggestion);
           setSuggestion(null);
         }}
       >
-        Use {label}
+        {labels?.useLanguage ? (
+          labels.useLanguage(<bdi lang={suggestion}>{label}</bdi>)
+        ) : (
+          <>
+            Use <bdi lang={suggestion}>{label}</bdi>
+          </>
+        )}
       </button>{' '}
       <button
-        aria-label="Dismiss language suggestion"
+        aria-label={labels?.dismissAriaLabel ?? labels?.dismiss ?? 'Dismiss language suggestion'}
         onClick={() => {
           setSuggestion(null);
           try {
@@ -148,7 +163,7 @@ export function LanguageSuggestion({
           } catch {}
         }}
       >
-        Dismiss
+        {labels?.dismiss ?? 'Dismiss'}
       </button>
     </aside>
   );

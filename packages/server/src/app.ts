@@ -17,6 +17,7 @@ import {
   DEFAULT_LOCALES,
 } from '@everylocale/core';
 import type { LocalizationStore, Scope } from '@everylocale/store';
+import type { ChatGptConnection } from './chatgpt.js';
 
 export type AppConfig = {
   adminToken: string;
@@ -24,6 +25,7 @@ export type AppConfig = {
   publicOrigin: string;
   secureCookie: boolean;
   providersReady: boolean;
+  connection?: ChatGptConnection;
 };
 type Identity = { owner: boolean; actor: string; projectId?: string; scopes: Scope[] };
 const allScopes: Scope[] = ['read', 'import', 'translate', 'review', 'approve', 'export'];
@@ -183,6 +185,43 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
     if (!user.scopes.includes('read'))
       throw new ContractError('forbidden', 'This token cannot read project configuration', 403);
     return store.listProjects().filter((x) => user.owner || x.id === user.projectId);
+  });
+  app.get('/api/v1/operations', async (request) => {
+    if (!identity(request).owner)
+      throw new ContractError('forbidden', 'Only the owner can inspect service operations', 403);
+    return { ...store.operations(), events: store.deliveryEvents() };
+  });
+  app.get('/api/v1/chatgpt/accounts', async (request) => {
+    if (!identity(request).owner)
+      throw new ContractError('forbidden', 'Only the owner can inspect provider accounts', 403);
+    return {
+      configured: Boolean(config.connection),
+      accounts: config.connection?.accounts() ?? [],
+      usageUrl: 'https://chatgpt.com/settings/usage',
+    };
+  });
+  app.get('/api/v1/chatgpt/accounts/:id/models', async (request) => {
+    if (!identity(request).owner)
+      throw new ContractError('forbidden', 'Only the owner can inspect provider accounts', 403);
+    if (!config.connection)
+      throw new ContractError('provider_configuration', 'ChatGPT is not configured', 503);
+    const { id } = z.object({ id: z.string().max(200) }).parse(request.params);
+    return config.connection.models(id);
+  });
+  app.post('/api/v1/chatgpt/accounts/:id/disconnect', async (request) => {
+    if (!identity(request).owner)
+      throw new ContractError('forbidden', 'Only the owner can disconnect provider accounts', 403);
+    if (!config.connection)
+      throw new ContractError('provider_configuration', 'ChatGPT is not configured', 503);
+    const { id } = z.object({ id: z.string().max(200) }).parse(request.params);
+    return config.connection.disconnect(id);
+  });
+  app.post('/api/v1/deliveries/:id/retry', async (request) => {
+    if (!identity(request).owner)
+      throw new ContractError('forbidden', 'Only the owner can retry delivery', 403);
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    store.retryDelivery(id);
+    return { ok: true };
   });
   app.put('/api/v1/projects/:project', async (request) => {
     const user = identity(request);
@@ -400,6 +439,14 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
       user = access(request, id, 'translate');
     store.retry(id, jobId(request), user.actor);
     return { ok: true };
+  });
+  app.get('/api/v1/projects/:project/bundle', async (request) => {
+    const id = projectId(request);
+    access(request, id, 'export');
+    const { current } = z
+      .object({ current: z.enum(['true', 'false']).default('true') })
+      .parse(request.query);
+    return store.exportBundle(id, current === 'true');
   });
   app.get('/api/v1/projects/:project/exports/:locale', async (request) => {
     const id = projectId(request);

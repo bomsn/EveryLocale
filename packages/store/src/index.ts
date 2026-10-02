@@ -20,6 +20,8 @@ import {
   type TranslationRecord,
 } from '@everylocale/core';
 import { SCHEMA } from './schema.js';
+import { deliveryMethods, type DeliveryStore } from './operations.js';
+export type { DeliveryStore, DeliveryEvent, Operations } from './operations.js';
 
 type JobRow = {
   id: string;
@@ -110,8 +112,12 @@ export interface TranslationStore {
     overrideReason?: string,
   ): void;
   exportCatalog(projectId: string, locale: string, requireCurrent?: boolean): ApprovedCatalog;
+  exportBundle(
+    projectId: string,
+    requireCurrent?: boolean,
+  ): import('@everylocale/core').CatalogBundle;
 }
-export interface LocalizationStore extends TranslationStore {
+export interface LocalizationStore extends TranslationStore, DeliveryStore {
   close(): void;
   saveProject(project: Project, actor?: string): Project;
   listProjects(): Array<Project & { spentUsd: number; reservedUsd: number }>;
@@ -218,6 +224,15 @@ const memoryHash = (project: Project, source: SourceUnit, locale: string) =>
   contextHash(project, { ...source, id: 'translation-memory' }, locale);
 /** All source, budget, approval, and publication changes share SQLite transactions. */
 export class SqliteStore implements LocalizationStore {
+  readonly operations = () => deliveryMethods.operations(this.db, this.now());
+  readonly checkHealth = (providersAvailable: boolean) =>
+    deliveryMethods.checkHealth(this.db, this.now(), providersAvailable);
+  readonly claimDelivery = () => deliveryMethods.claim(this.db, this.now());
+  readonly settleDelivery = (id: string, token: string, error?: string) =>
+    deliveryMethods.settle(this.db, this.now(), id, token, error);
+  readonly retryDelivery = (id: string) => deliveryMethods.retry(this.db, this.now(), id);
+  readonly deliveryEvents = (project?: string) => deliveryMethods.events(this.db, project);
+  readonly backup = (path: string) => deliveryMethods.backup(this.db, path);
   readonly db: Database.Database;
   constructor(
     path: string,
@@ -228,7 +243,7 @@ export class SqliteStore implements LocalizationStore {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 1) throw new Error('Database schema is newer than this service');
+    if (version > 3) throw new Error('Database schema is newer than this service');
     this.db.exec(SCHEMA);
   }
   close() {
@@ -249,6 +264,11 @@ export class SqliteStore implements LocalizationStore {
         'INSERT INTO audit(project_id,actor,action,entity_id,detail,created_at) VALUES(?,?,?,?,?,?)',
       )
       .run(projectId, actor, action, entityId, JSON.stringify(detail), this.now());
+    if (['translation.approve', 'source.withdraw', 'publication.rollback'].includes(action))
+      deliveryMethods.emit(this.db, this.now(), projectId, 'publication.changed', entityId, {
+        action,
+        ...(detail as object),
+      });
   }
   getProject(id: string): Project {
     const row = this.db.prepare('SELECT config FROM projects WHERE id=?').get(id) as
@@ -606,7 +626,17 @@ export class SqliteStore implements LocalizationStore {
               this.now(),
               this.now(),
             );
-          if (memory)
+          const correction = this.db
+            .prepare(
+              "SELECT translation FROM jobs WHERE project_id=? AND unit_id=? AND locale=? AND source_hash=? AND operation='review' AND translation IS NOT NULL ORDER BY seq DESC LIMIT 1",
+            )
+            .get(projectId, unitId, locale, row.source_hash) as { translation: string } | undefined;
+          // New guidance rechecks a person's wording instead of silently replacing their correction.
+          if (correction)
+            this.db
+              .prepare("UPDATE jobs SET operation='review',translation=?,revision=1 WHERE id=?")
+              .run(correction.translation, id);
+          else if (memory)
             this.db
               .prepare(
                 "UPDATE jobs SET status='review',translation=?,findings=?,review_summary=?,revision=1 WHERE id=?",
@@ -753,10 +783,22 @@ export class SqliteStore implements LocalizationStore {
             'Previous worker lease expired; reserved cost charged conservatively',
             expired.id,
           );
+        if (expired.attempts >= 3)
+          deliveryMethods.emit(
+            this.db,
+            this.now(),
+            expired.project_id,
+            'alert.translation_failed',
+            expired.id,
+            { locale: expired.locale, reason: 'worker_interrupted' },
+          );
       }
       const pending = this.db
         .prepare(
-          "SELECT * FROM jobs WHERE status='pending' AND available_at<=? ORDER BY seq LIMIT 100",
+          `WITH ranked AS (
+            SELECT seq,ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY seq) AS position
+            FROM jobs WHERE status='pending' AND available_at<=?
+          ) SELECT jobs.* FROM ranked JOIN jobs USING(seq) ORDER BY ranked.position,jobs.seq LIMIT 100`,
         )
         .all(this.now()) as JobRow[];
       for (const job of pending) {
@@ -781,6 +823,14 @@ export class SqliteStore implements LocalizationStore {
               "UPDATE jobs SET status='failed',error='Source structure or provider cost reservation is invalid' WHERE id=?",
             )
             .run(job.id);
+          deliveryMethods.emit(
+            this.db,
+            this.now(),
+            job.project_id,
+            'alert.translation_failed',
+            job.id,
+            { locale: job.locale, reason: 'invalid_reservation' },
+          );
           continue;
         }
         const claimed = this.db
@@ -789,9 +839,26 @@ export class SqliteStore implements LocalizationStore {
           )
           .run(reserve, job.project_id, reserve);
         if (!claimed.changes) {
+          // Active jobs can release unused reservations; pending work must wait for that balance.
+          if (
+            this.db
+              .prepare(
+                "SELECT 1 FROM projects WHERE id=? AND spent+?<=json_extract(config,'$.budgetUsd')+0.000000001",
+              )
+              .get(job.project_id, reserve)
+          )
+            continue;
           this.db
             .prepare("UPDATE jobs SET status='failed',error='Project budget exhausted' WHERE id=?")
             .run(job.id);
+          deliveryMethods.emit(
+            this.db,
+            this.now(),
+            job.project_id,
+            'alert.budget_exhausted',
+            job.id,
+            { locale: job.locale },
+          );
           continue;
         }
         const leaseToken = randomUUID();
@@ -861,6 +928,13 @@ export class SqliteStore implements LocalizationStore {
             summary,
           );
       this.approveAutomatically(project, id);
+      if (
+        project.approvalMode === 'automatic' &&
+        unique.some((finding) => finding.severity !== 'minor')
+      )
+        deliveryMethods.emit(this.db, this.now(), job.project_id, 'alert.review_required', id, {
+          locale: job.locale,
+        });
     });
   }
   /** Automatic approval follows the same revision and publication transaction as owner approval.
@@ -888,6 +962,10 @@ export class SqliteStore implements LocalizationStore {
           this.now() + (retryAfterMs ?? 0),
           id,
         );
+      if (!retry)
+        deliveryMethods.emit(this.db, this.now(), job.project_id, 'alert.translation_failed', id, {
+          locale: job.locale,
+        });
     });
   }
   edit(projectId: string, id: string, revision: number, translation: string, actor: string) {
@@ -973,6 +1051,7 @@ export class SqliteStore implements LocalizationStore {
           this.now(),
         );
       this.audit(projectId, actor, 'translation.approve', id, {
+        locale: job.locale,
         revision,
         sourceHash: job.sourceHash,
         overrideReason: overrideReason?.trim() ?? null,
@@ -1040,6 +1119,25 @@ export class SqliteStore implements LocalizationStore {
       messages: Object.fromEntries(Object.entries(messages)),
       sources: Object.fromEntries(Object.entries(sources)),
     };
+  }
+  exportBundle(
+    projectId: string,
+    requireCurrent = true,
+  ): import('@everylocale/core').CatalogBundle {
+    // One read transaction prevents publications from changing between locale exports.
+    return this.db.transaction(() => {
+      const project = this.getProject(projectId);
+      const catalogs = [project.sourceLocale, ...project.targetLocales].map((locale) => ({
+        ...this.exportCatalog(projectId, locale, requireCurrent),
+        sourceLocale: project.sourceLocale,
+      }));
+      return {
+        schemaVersion: 1 as const,
+        projectId,
+        catalogs,
+        revision: hash({ projectId, catalogs }),
+      };
+    })();
   }
   snapshot(projectId: string, locale: string): ApprovedCatalog {
     const catalog = this.exportCatalog(projectId, locale);

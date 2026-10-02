@@ -23,6 +23,8 @@
     "dev": "pnpm --filter @everylocale/server dev",
     "cli": "tsx packages/cli/src/index.ts",
     "benchmark": "tsx --env-file-if-exists=.env tools/benchmark.ts",
+    "chatgpt": "tsx --env-file-if-exists=.env packages/server/src/chatgpt-cli.ts",
+    "maintenance": "tsx --env-file-if-exists=.env packages/server/src/maintenance.ts",
     "setup": "node tools/setup.mjs",
     "release:pack": "pnpm build && node tools/pack.mjs"
   },

@@ -31,6 +31,7 @@ export class TranslationWorker {
     const wrap = (provider: ProviderConfig): ProviderConfig => ({
       ...provider,
       beforeRequest: async (signal) => {
+        await provider.beforeRequest?.(signal);
         const key = provider.baseUrl;
         const start = Math.max(Date.now(), nextRequest.get(key) ?? 0);
         nextRequest.set(key, start + config.intervalMs);
@@ -47,7 +48,12 @@ export class TranslationWorker {
   private tick = () => {
     if (this.stopped) return;
     try {
-      if (this.active.size < this.config.concurrency && Date.now() >= this.nextStart) {
+      if (
+        this.active.size < this.config.concurrency &&
+        Date.now() >= this.nextStart &&
+        this.config.generator.available?.() !== false &&
+        this.config.reviewer.available?.() !== false
+      ) {
         const job = this.store.claim((project, unit, locale, reviewOnly, translation) =>
           reviewOnly && translation !== null
             ? estimateReviewReservation(project, unit, locale, translation, this.config.reviewer)

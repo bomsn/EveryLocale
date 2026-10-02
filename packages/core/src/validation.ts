@@ -1,6 +1,28 @@
 import { parse, TYPE, type MessageFormatElement } from '@formatjs/icu-messageformat-parser';
 import * as OpenCC from 'opencc-js';
 import type { Finding, SourceUnit, GlossaryEntry } from './types.js';
+const toTaiwan = OpenCC.Converter({ from: 'cn', to: 'tw' });
+/** Shared forms occur in legitimate Traditional words; only unequivocal simplified forms block. */
+function simplifiedOnlyCharacters() {
+  const dictionaries = (OpenCC.Locale.from.cn ?? []) as readonly (readonly (
+    | string
+    | readonly (readonly [string, string])[]
+  )[])[];
+  const entries = dictionaries.flatMap((group) =>
+    group.flatMap((dictionary) =>
+      typeof dictionary === 'string'
+        ? dictionary.split('|').map((row) => row.split(' ') as [string, string])
+        : [...dictionary],
+    ),
+  );
+  const traditional = new Set(entries.flatMap(([, target]) => [...target]));
+  return new Set(
+    entries
+      .filter(([source]) => [...source].length === 1 && !traditional.has(source))
+      .map(([source]) => source),
+  );
+}
+const simplifiedOnly = simplifiedOnlyCharacters();
 
 function signature(nodes: MessageFormatElement[], into = new Set<string>()): Set<string> {
   for (const node of nodes) {
@@ -129,13 +151,19 @@ export function validateTranslation(
   if (locale.startsWith('zh-Hant')) {
     let text = translation;
     for (const term of protectedTerms) text = text.split(term).join('');
-    const traditional = OpenCC.Converter({ from: 'cn', to: 'tw' })(text);
-    if (traditional !== text)
+    const simplified = [...new Set([...text].filter((character) => simplifiedOnly.has(character)))];
+    if (simplified.length)
       findings.push({
-        severity: 'major',
+        severity: 'critical',
         code: 'chinese_script',
+        message: `Simplified-only Chinese characters require correction: ${simplified.join('')}`,
+      });
+    else if (toTaiwan(text) !== text)
+      findings.push({
+        severity: 'minor',
+        code: 'chinese_variant',
         message:
-          'Review Simplified Chinese characters or terminology in this Traditional Chinese translation.',
+          'Chinese conversion suggests a script or regional variant. Confirm in context; valid Traditional Chinese wording can also differ from the conversion dictionary.',
       });
   }
   return findings;

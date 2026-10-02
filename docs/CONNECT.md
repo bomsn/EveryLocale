@@ -26,6 +26,25 @@ pnpm cli check --input source.json --catalog locales/ar.approved.json
 
 The CLI export requires current approvals. Import the resulting JSON as a build artifact. Do not load pending review jobs into your public app. Commit catalogs as a reviewable repository change, and publish all catalogs in one atomic release with the previous release retained for rollback.
 
+### Continuous delivery
+
+For an automatic project, CI can wait for approval and pull all configured locales as one release:
+
+```sh
+pnpm cli sync --project your-project --input source.json --locales ar,zh-Hant-TW,de,es,fr --wait --timeout 600
+pnpm cli pull --project your-project --output locales
+```
+
+Sync exits unsuccessfully if work fails, becomes stale, needs review, or exceeds the timeout. Human projects pause for review; rerun after approval. Pull rejects incomplete current approvals. `locales/current.json` points to an immutable directory under `locales/releases/REVISION/`, containing the source and target catalogs plus `bundle.json`. Capture the pointer once per build so every language comes from the same release. Keep prior directories for rollback:
+
+```sh
+pnpm cli rollback --output locales --revision PREVIOUS_REVISION
+```
+
+Rollback verifies all files before switching the pointer. `--allow-stale` explicitly permits earlier approved translations during source updates. Removing a target locale disables its next delivered release. Preserve the previous application deployment for application-level rollback.
+
+In GitHub Actions, store only `EVERYLOCALE_URL` and the scoped `EVERYLOCALE_TOKEN` as secrets. Run extraction, sync, pull, application checks, and then your deployment step. Models and refresh credentials stay on the persistent EveryLocale service. Use a workflow concurrency group to avoid competing deployments. Choose the release branch and deployment permissions explicitly; translation approval does not grant repository merge or deployment authorization.
+
 ## React, Remix 2, and Next.js packages
 
 Build package archives from the EveryLocale checkout:

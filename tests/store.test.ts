@@ -110,8 +110,9 @@ test('budget reservations are atomic and expired leases cannot publish', () => {
       claim = store.claim(() => 0.7)!;
     store.importSources('test', [unitSchema.parse({ id: 'second', source: 'Continue' })]);
     const second = store.enqueue('test', ['second'], ['de'], 'second')[0]!;
+    // A request priced above the entire budget fails even if active reservations are released.
     assert.equal(
-      store.claim(() => 0.7),
+      store.claim(() => 1.1),
       null,
     );
     assert.equal(store.getJob('test', second.id).status, 'failed');

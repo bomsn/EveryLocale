@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import '@everylocale/react/fonts.css';
 import { resolveRequest } from '@everylocale/adapters';
 export default async function Layout({
   children,
