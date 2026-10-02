@@ -43,7 +43,7 @@ pnpm cli rollback --output locales --revision PREVIOUS_REVISION
 
 Rollback verifies all files before switching the pointer. `--allow-stale` explicitly permits earlier approved translations during source updates. Removing a target locale disables its next delivered release. Preserve the previous application deployment for application-level rollback.
 
-In GitHub Actions, store only `EVERYLOCALE_URL` and the scoped `EVERYLOCALE_TOKEN` as secrets. Run extraction, sync, pull, application checks, and then your deployment step. Models and refresh credentials stay on the persistent EveryLocale service. Use a workflow concurrency group to avoid competing deployments. Choose the release branch and deployment permissions explicitly; translation approval does not grant repository merge or deployment authorization.
+In GitHub Actions, store only `EVERYLOCALE_URL` and the scoped `EVERYLOCALE_TOKEN` as secrets. Run extraction, sync, pull, application checks, and then your deployment step. Models and refresh credentials stay on the persistent EveryLocale service. Use a workflow concurrency group to avoid competing deployments. Choose the release branch and deployment permissions explicitly; translation approval does not grant repository merge or deployment authorization. The [CI/CD guide](CI-CD.md) includes a complete GitHub Actions example and recovery behavior.
 
 ## React, Remix 2, and Next.js packages
 

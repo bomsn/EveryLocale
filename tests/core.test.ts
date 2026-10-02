@@ -25,6 +25,26 @@ test('approved internal-link rendering preserves Gutenberg markup and escapes lo
   );
 });
 
+test('currency symbols cannot change or disappear during localization, including a zero price', () => {
+  const source = unitSchema.parse({ id: 'license-price', source: '$0 software license' });
+  const changed = validateTranslation(source, '0 € pour la licence logicielle', 'fr');
+  assert.ok(
+    changed.some(
+      (finding) => finding.code === 'protected_value' && finding.severity === 'critical',
+    ),
+  );
+  assert.ok(
+    changed.some((finding) => finding.code === 'invented_value' && finding.severity === 'critical'),
+  );
+  assert.ok(
+    validateTranslation(source, '0 pour la licence logicielle', 'fr').some(
+      (finding) => finding.severity === 'critical',
+    ),
+  );
+  assert.deepEqual(validateTranslation(source, '$0 pour la licence logicielle', 'fr'), []);
+  assert.deepEqual(validateTranslation(source, 'رخصة البرنامج $0', 'ar'), []);
+});
+
 test('country and browser hints never override an explicit English preference', () => {
   assert.equal(
     resolveLocale({ pathname: '/dashboard', privateSurface: true, profile: 'en', cookie: 'fr' }),

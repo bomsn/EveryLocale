@@ -66,6 +66,8 @@ function checkPlural(nodes: MessageFormatElement[], locale: string, findings: Fi
 export function protectedValues(source: string, terms: string[] = []): string[] {
   return [
     ...terms.filter((x) => source.includes(x)),
+    // Locale changes must not imply a currency conversion, even when the numeric amount is zero.
+    ...(source.match(/\p{Sc}/gu) ?? []),
     ...(source.match(
       /https?:\/\/[^\s<>"')]+|%(?:\d+\$)?[+#\-0 ]*\d*(?:\.\d+)?[a-zA-Z]|\$\{[^}]+\}|\{\{[^}]+\}\}|\b\d+(?:[.,]\d+)*(?:%|\b)|\[\[EL:[^\]]+\]\]/gu,
     ) ?? []),
