@@ -19,11 +19,12 @@ async function run() {
     throw new Error(
       'Commands: backup --output FILE [--database FILE], restore --input FILE --output FILE, check [--database FILE]',
     );
+  const databaseOption = option('database');
   const database =
     command === 'restore'
       ? required('input')
-      : option('database')
-        ? resolve(option('database')!)
+      : databaseOption
+        ? resolve(databaseOption)
         : databasePath();
   await access(database);
   const store = new SqliteStore(database);
@@ -45,7 +46,7 @@ async function run() {
     store.close();
   }
 }
-run().catch((error) => {
+run().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : 'Database maintenance failed');
   process.exitCode = 1;
 });

@@ -85,7 +85,7 @@ Change `Create a project` to `Create your first project` in the original file, t
 ## Next: use this in your product
 
 - [Connect a files-based app](CONNECT.md#files-and-builds) and get a translated file from the CLI.
-- [Connect React, Remix, or Next.js](CONNECT.md#react-remix-and-nextjs) to display messages in your interface.
+- [Connect React or Next.js](CONNECT.md#react-and-nextjs) to display messages in your interface.
 - [Add GitHub Actions](CI-CD.md) after the manual workflow works.
 - [Prepare hosting, backups, and alerts](OPERATIONS.md) when moving to a server.
 

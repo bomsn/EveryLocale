@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SqliteStore } from '../packages/store/dist/index.js';
 import { ChatGptConnection } from '../packages/server/dist/chatgpt.js';
-import { modelCall, ProviderError } from '../packages/core/dist/index.js';
+import { modelCall } from '../packages/core/dist/index.js';
 
 test('ChatGPT registers through PKCE, validates identity, encrypts tokens and serializes rotating refresh across processes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'everylocale-chatgpt-'));
@@ -24,146 +24,151 @@ test('ChatGPT registers through PKCE, validates identity, encrypts tokens and se
     streamMode = 'complete',
     scope = 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct';
   const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
-  const fixture = createServer(async (request, response) => {
-    let raw = '';
-    for await (const chunk of request) raw += chunk;
-    if (request.url?.endsWith('/jwks.json')) {
-      response.setHeader('content-type', 'application/json');
-      response.end(
-        JSON.stringify({
-          keys: [{ ...publicKey.export({ format: 'jwk' }), kid: 'test', alg: 'RS256', use: 'sig' }],
-        }),
-      );
-      return;
-    }
-    if (request.url?.endsWith('/oauth/revoke')) {
-      revocationCalls++;
-      response.end();
-      return;
-    }
-    if (request.url?.endsWith('/oauth/token')) {
-      const body = Object.fromEntries(new URLSearchParams(raw));
-      assert.equal(body.client_id, clientId);
-      assert.equal(body.resource, 'https://api.openai.com/v1');
-      if (body.grant_type === 'refresh_token') {
-        refreshCalls++;
-        assert.equal(body.refresh_token, 'disposable-refresh-credential');
-        assert.equal(body.scope, undefined);
-        if (refreshError) {
-          response
-            .writeHead(400, { 'content-type': 'application/json' })
-            .end(JSON.stringify({ error: 'invalid_grant' }));
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
+  const fixture = createServer((request, response) => {
+    // node:http ignores the returned promise, so the async body runs detached.
+    void (async () => {
+      let raw = '';
+      for await (const chunk of request) raw += String(chunk);
+      if (request.url?.endsWith('/jwks.json')) {
+        response.setHeader('content-type', 'application/json');
         response.end(
           JSON.stringify({
-            access_token: 'disposable-rotated-access',
-            refresh_token: 'disposable-rotated-refresh',
+            keys: [
+              { ...publicKey.export({ format: 'jwk' }), kid: 'test', alg: 'RS256', use: 'sig' },
+            ],
+          }),
+        );
+        return;
+      }
+      if (request.url?.endsWith('/oauth/revoke')) {
+        revocationCalls++;
+        response.end();
+        return;
+      }
+      if (request.url?.endsWith('/oauth/token')) {
+        const body = Object.fromEntries(new URLSearchParams(raw));
+        assert.equal(body.client_id, clientId);
+        assert.equal(body.resource, 'https://api.openai.com/v1');
+        if (body.grant_type === 'refresh_token') {
+          refreshCalls++;
+          assert.equal(body.refresh_token, 'disposable-refresh-credential');
+          assert.equal(body.scope, undefined);
+          if (refreshError) {
+            response
+              .writeHead(400, { 'content-type': 'application/json' })
+              .end(JSON.stringify({ error: 'invalid_grant' }));
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          response.end(
+            JSON.stringify({
+              access_token: 'disposable-rotated-access',
+              refresh_token: 'disposable-rotated-refresh',
+              token_type: 'Bearer',
+              expires_in: 3600,
+              scope,
+            }),
+          );
+          return;
+        }
+        assert.equal(body.redirect_uri, authorization!.searchParams.get('redirect_uri'));
+        assert.equal(
+          createHash('sha256').update(body.code_verifier!).digest('base64url'),
+          authorization!.searchParams.get('code_challenge'),
+        );
+        const header = Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'test' })).toString(
+          'base64url',
+        );
+        const payload = Buffer.from(
+          JSON.stringify({
+            iss: 'https://auth.openai.com',
+            aud: clientId,
+            exp: Math.floor(Date.now() / 1000) + 300,
+            nonce: authorization!.searchParams.get('nonce'),
+            sub: 'verified-subject',
+            email: 'fixture@example.invalid',
+          }),
+        ).toString('base64url');
+        const jwt = `${header}.${payload}.${sign('RSA-SHA256', Buffer.from(`${header}.${payload}`), privateKey).toString('base64url')}`;
+        response.end(
+          JSON.stringify({
+            access_token: 'disposable-access-credential',
+            refresh_token: 'disposable-refresh-credential',
+            id_token: jwt,
             token_type: 'Bearer',
-            expires_in: 3600,
+            expires_in: 1,
             scope,
           }),
         );
         return;
       }
-      assert.equal(body.redirect_uri, authorization!.searchParams.get('redirect_uri'));
-      assert.equal(
-        createHash('sha256').update(body.code_verifier!).digest('base64url'),
-        authorization!.searchParams.get('code_challenge'),
-      );
-      const header = Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'test' })).toString(
-        'base64url',
-      );
-      const payload = Buffer.from(
-        JSON.stringify({
-          iss: 'https://auth.openai.com',
-          aud: clientId,
-          exp: Math.floor(Date.now() / 1000) + 300,
-          nonce: authorization!.searchParams.get('nonce'),
-          sub: 'verified-subject',
-          email: 'fixture@example.invalid',
-        }),
-      ).toString('base64url');
-      const jwt = `${header}.${payload}.${sign('RSA-SHA256', Buffer.from(`${header}.${payload}`), privateKey).toString('base64url')}`;
-      response.end(
-        JSON.stringify({
-          access_token: 'disposable-access-credential',
-          refresh_token: 'disposable-refresh-credential',
-          id_token: jwt,
-          token_type: 'Bearer',
-          expires_in: 1,
-          scope,
-        }),
-      );
-      return;
-    }
-    if (request.url === '/v1/models') {
-      response.end(
-        JSON.stringify({
-          models: [
-            { slug: 'discovered-model', display_name: 'Discovered model', visibility: 'list' },
-            { slug: 'hidden-model', display_name: 'Hidden', visibility: 'hidden' },
-          ],
-        }),
-      );
-      return;
-    }
-    if (request.url === '/v1/responses') {
-      const body = JSON.parse(raw);
-      requests.push({ path: request.url, body });
-      assert.equal(body.store, false);
-      assert.equal(body.stream, true);
-      assert.equal(body.model, 'discovered-model');
-      for (const forbidden of [
-        'max_output_tokens',
-        'temperature',
-        'top_p',
-        'previous_response_id',
-        'background',
-      ])
-        assert.equal(body[forbidden], undefined);
-      response.setHeader('content-type', 'text/event-stream');
-      response.write(
-        'data: ' +
-          JSON.stringify({ type: 'response.output_text.delta', delta: 'partial invalid text' }) +
-          '\n\n',
-      );
-      if (streamMode === 'complete')
+      if (request.url === '/v1/models') {
         response.end(
+          JSON.stringify({
+            models: [
+              { slug: 'discovered-model', display_name: 'Discovered model', visibility: 'list' },
+              { slug: 'hidden-model', display_name: 'Hidden', visibility: 'hidden' },
+            ],
+          }),
+        );
+        return;
+      }
+      if (request.url === '/v1/responses') {
+        const body = JSON.parse(raw);
+        requests.push({ path: request.url, body });
+        assert.equal(body.store, false);
+        assert.equal(body.stream, true);
+        assert.equal(body.model, 'discovered-model');
+        for (const forbidden of [
+          'max_output_tokens',
+          'temperature',
+          'top_p',
+          'previous_response_id',
+          'background',
+        ])
+          assert.equal(body[forbidden], undefined);
+        response.setHeader('content-type', 'text/event-stream');
+        response.write(
           'data: ' +
-            JSON.stringify({
-              type: 'response.completed',
-              response: {
-                output: [
-                  {
-                    type: 'message',
-                    content: [{ type: 'output_text', text: '{"translation":"Willkommen"}' }],
-                  },
-                ],
-                usage: { input_tokens: 20, output_tokens: 10 },
-              },
-            }) +
+            JSON.stringify({ type: 'response.output_text.delta', delta: 'partial invalid text' }) +
             '\n\n',
         );
-      else if (streamMode === 'quota')
-        response.end(
-          'data: ' +
-            JSON.stringify({
-              type: 'response.failed',
-              response: { error: { code: 'subscription_sharing_usage_limit_exceeded' } },
-            }) +
-            '\n\n',
-        );
-      else response.end();
-      return;
-    }
-    response.writeHead(404).end();
+        if (streamMode === 'complete')
+          response.end(
+            'data: ' +
+              JSON.stringify({
+                type: 'response.completed',
+                response: {
+                  output: [
+                    {
+                      type: 'message',
+                      content: [{ type: 'output_text', text: '{"translation":"Willkommen"}' }],
+                    },
+                  ],
+                  usage: { input_tokens: 20, output_tokens: 10 },
+                },
+              }) +
+              '\n\n',
+          );
+        else if (streamMode === 'quota')
+          response.end(
+            'data: ' +
+              JSON.stringify({
+                type: 'response.failed',
+                response: { error: { code: 'subscription_sharing_usage_limit_exceeded' } },
+              }) +
+              '\n\n',
+          );
+        else response.end();
+        return;
+      }
+      response.writeHead(404).end();
+    })();
   });
   await new Promise<void>((resolve) => fixture.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(fixture.address() as { port: number }).port}`;
   const request: typeof fetch = (input, init) => {
-    const url = new URL(String(input));
+    const url = new URL(input instanceof Request ? input.url : String(input));
     assert.ok(['auth.openai.com', 'api.openai.com'].includes(url.hostname));
     return fetch(origin + url.pathname, init);
   };

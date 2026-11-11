@@ -27,7 +27,6 @@ test('sentence-level HTML extraction keeps inline markup and rejects reordered s
     '<p>Hello <strong>friend</strong>, welcome.</p>',
     'html',
     'page',
-    { groupInline: true },
   );
   assert.equal(document.units.length, 1);
   const unit = document.units[0]!;
@@ -48,8 +47,8 @@ test('sentence-level HTML extraction keeps inline markup and rejects reordered s
     document.render(
       {
         [unit.id]: unit.source
-          .replace(tokens[0]!, 'TEMP')
-          .replace(tokens[1]!, tokens[0]!)
+          .replace(tokens[0], 'TEMP')
+          .replace(tokens[1]!, tokens[0])
           .replace('TEMP', tokens[1]!),
       },
       'fr',
@@ -60,7 +59,7 @@ test('sentence-level HTML extraction keeps inline markup and rejects reordered s
 test('Arabic and Chinese can omit English articles around inline tags without changing protected markup', () => {
   const source =
     '<!-- wp:paragraph --><p>A <strong>project</strong> groups text. The <a href="/guide/">guide</a> explains it.</p><code>const id = 1;</code><!-- /wp:paragraph -->';
-  const document = extractDocument(source, 'html', 'articles', { groupInline: true });
+  const document = extractDocument(source, 'html', 'articles');
   const unit = document.units[0]!;
   const tokens = unit.source.match(/\[\[EL:[^\]]+\]\]/g)!;
   assert.equal(tokens.length, 4);
@@ -98,7 +97,6 @@ test('whole protected code values can change sentence order without changing the
     '<p>Sign in with <code>ADMIN_TOKEN</code> from <code>.env</code>.</p>',
     'html',
     'login',
-    { groupInline: true },
   );
   const unit = document.units[0]!;
   const tokens = unit.source.match(/\[\[EL:[^\]]+\]\]/g)!;

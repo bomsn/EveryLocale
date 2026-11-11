@@ -9,27 +9,24 @@ export const unitSchema = z.object({
   protectedTerms: z.array(z.string().min(1).max(240)).max(100).default([]),
 });
 export type SourceUnit = z.infer<typeof unitSchema>;
-export type Finding = { severity: 'critical' | 'major' | 'minor'; code: string; message: string };
-export type Review = { findings: Finding[]; summary: string };
+export const findingSchema = z.object({
+  severity: z.enum(['critical', 'major', 'minor']),
+  code: z.string().min(1).max(80),
+  message: z.string().min(1).max(1000),
+});
+export type Finding = z.infer<typeof findingSchema>;
 export const reviewSchema = z.object({
-  findings: z
-    .array(
-      z.object({
-        severity: z.enum(['critical', 'major', 'minor']),
-        code: z.string().min(1).max(80),
-        message: z.string().min(1).max(1000),
-      }),
-    )
-    .max(30),
+  findings: z.array(findingSchema).max(30),
   summary: z.string().max(2000),
 });
+export type Review = z.infer<typeof reviewSchema>;
 export type GlossaryEntry = { source: string; targets: Record<string, string>; keep?: boolean };
 export const projectSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,79}$/),
   name: z.string().min(1).max(120),
   sourceLocale: z.string().default('en'),
   targetLocales: z.array(z.string().min(2).max(40)).max(100),
-  budgetUsd: z.number().finite().nonnegative().max(1000000),
+  budgetUsd: z.number().nonnegative().max(1000000),
   approvalMode: z.enum(['automatic', 'human']).default('human'),
   glossary: z
     .array(
@@ -99,7 +96,8 @@ export const approvedCatalogSchema = z
       });
   });
 export type ExtractedDocument = {
-  format: 'json' | 'yaml' | 'po' | 'markdown' | 'mdx' | 'html';
+  /** A registered format id, see `formatIds()`. */
+  format: string;
   content: string;
   units: SourceUnit[];
   render(translations: Record<string, string>, locale: string): string;

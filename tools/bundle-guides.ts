@@ -1,10 +1,11 @@
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { posix } from 'node:path';
 import { documentPreview } from '../packages/core/dist/preview.js';
+import { releaseVersion } from './process.js';
 
 const destination = 'packages/server/public/guides';
-const { version } = JSON.parse(await readFile('package.json', 'utf8'));
-const guides = [
+const version = releaseVersion();
+const guides: ReadonlyArray<readonly [slug: string, file: string, title: string]> = [
   ['getting-started', 'docs/GETTING-STARTED.md', 'Translate your first file'],
   ['workflow', 'docs/WORKFLOW.md', 'How it works'],
   ['connect', 'docs/CONNECT.md', 'Connect your app'],
@@ -30,7 +31,7 @@ for (const [slug, filename, title] of guides) {
     focusableCode: true,
     link: (href) => {
       if (/^(?:https?:\/\/|#)/i.test(href)) return href;
-      const [path, fragment] = href.split('#');
+      const [path = '', fragment] = href.split('#');
       const target = posix.normalize(posix.join(posix.dirname(filename), path));
       const local = byFile.get(target);
       if (local) return local + (fragment ? '#' + fragment : '');

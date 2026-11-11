@@ -13,8 +13,8 @@ function processResult(code: string) {
     const child = spawn(process.execPath, ['--input-type=module', '-e', code]);
     let output = '';
     let errors = '';
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (errors += chunk));
+    child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr.on('data', (chunk: Buffer) => (errors += chunk.toString()));
     child.on('error', reject);
     child.on('exit', (status) =>
       status === 0 ? resolve(output) : reject(new Error(errors || `Child exited ${status}`)),

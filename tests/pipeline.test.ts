@@ -5,10 +5,10 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
-import { SqliteStore } from '../packages/store/src/index.js';
-import { createApp } from '../packages/server/src/app.js';
-import { TranslationWorker } from '../packages/server/src/worker.js';
-import { projectSchema, unitSchema } from '../packages/core/dist/index.js';
+import { SqliteStore } from '../packages/store/dist/index.js';
+import { createApp } from '../packages/server/dist/app.js';
+import { TranslationWorker } from '../packages/server/dist/worker.js';
+import { projectSchema, unitSchema, type SourceUnit } from '../packages/core/dist/index.js';
 
 test('CLI extraction and approved rendering preserve a non-English source revision', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'everylocale-source-locale-'));
@@ -35,8 +35,8 @@ test('CLI extraction and approved rendering preserve a non-English source revisi
       ],
       {},
     );
-    const units = JSON.parse(await readFile(unitsPath, 'utf8'));
-    assert.equal(units[0].sourceLocale, 'fr');
+    const units = JSON.parse(await readFile(unitsPath, 'utf8')) as SourceUnit[];
+    assert.equal(units[0]!.sourceLocale, 'fr');
     store.saveProject(
       projectSchema.parse({
         id: 'site',
@@ -47,7 +47,7 @@ test('CLI extraction and approved rendering preserve a non-English source revisi
       }),
     );
     store.importSources('site', units);
-    const job = store.enqueue('site', [units[0].id], ['de'], 'first')[0]!,
+    const job = store.enqueue('site', [units[0]!.id], ['de'], 'first')[0]!,
       claim = store.claim(() => 0)!;
     store.complete(job.id, claim.leaseToken, 'Hallo {name}', [], '');
     store.approve('site', job.id, 1, 'owner');
@@ -97,31 +97,34 @@ async function cli(args: string[], environment: Record<string, string>) {
       { env: { ...globalThis.process.env, ...environment }, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let output = '';
-    process.stdout.on('data', (x) => (output += x));
-    process.stderr.on('data', (x) => (output += x));
+    process.stdout.on('data', (x: Buffer) => (output += x.toString()));
+    process.stderr.on('data', (x: Buffer) => (output += x.toString()));
     process.on('error', reject);
     process.on('exit', (code) => (code === 0 ? resolvePromise(output) : reject(new Error(output))));
   });
 }
 test('real HTTP provider transport, durable worker, owner approval and CLI export run end to end', async () => {
   let calls = 0;
-  const provider = createServer(async (request, response) => {
-    let body = '';
-    for await (const chunk of request) body += chunk;
-    const payload = JSON.parse(body),
-      input = JSON.parse(payload.messages[1].content);
-    calls++;
-    const value =
-      payload.model === 'reviewer'
-        ? { findings: [], summary: 'Fixture review: no issues.' }
-        : { translation: translations[input.targetLocale] };
-    response.setHeader('content-type', 'application/json');
-    response.end(
-      JSON.stringify({
-        choices: [{ message: { content: JSON.stringify(value) } }],
-        usage: { prompt_tokens: 100, completion_tokens: 25 },
-      }),
-    );
+  const provider = createServer((request, response) => {
+    // node:http ignores the returned promise, so the async body runs detached.
+    void (async () => {
+      let body = '';
+      for await (const chunk of request) body += String(chunk);
+      const payload = JSON.parse(body) as { model: string; messages: Array<{ content: string }> },
+        input = JSON.parse(payload.messages[1]!.content) as { targetLocale: string };
+      calls++;
+      const value =
+        payload.model === 'reviewer'
+          ? { findings: [], summary: 'Fixture review: no issues.' }
+          : { translation: translations[input.targetLocale] };
+      response.setHeader('content-type', 'application/json');
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(value) } }],
+          usage: { prompt_tokens: 100, completion_tokens: 25 },
+        }),
+      );
+    })();
   });
   await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
   const providerPort = (provider.address() as { port: number }).port;

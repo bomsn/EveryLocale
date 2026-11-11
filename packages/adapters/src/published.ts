@@ -58,7 +58,7 @@ export class PublishedRegistry {
           url.origin !== base.origin ||
           url.search ||
           url.hash ||
-          /[\u0000-\u001f\u007f]/u.test(item.path)
+          /\p{Cc}/u.test(item.path)
         )
           throw new Error('Published paths must be same-origin paths without queries or fragments');
         return Object.freeze({ ...item, path: url.pathname });
@@ -97,7 +97,10 @@ export class PublishedRegistry {
     return Object.fromEntries(page.variants.map((item) => [item.locale, item.path]));
   }
   original(pageId: string): string {
-    return this.paths(pageId)[this.sourceLocale]!;
+    const path = this.paths(pageId)[this.sourceLocale];
+    // The constructor rejects publications without an original-language variant.
+    if (path === undefined) throw new Error('Publication has no original-language variant');
+    return path;
   }
   switch(pageId: string, locale: string): string | null {
     return this.paths(pageId)[locale] ?? null;

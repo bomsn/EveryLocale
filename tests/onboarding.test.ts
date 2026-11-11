@@ -8,9 +8,9 @@ import { join, resolve, relative } from 'node:path';
 import { SqliteStore } from '../packages/store/dist/index.js';
 import { projectSchema, serviceUrl, documentPreview } from '../packages/core/dist/index.js';
 import { EveryLocaleClient } from '../packages/adapters/dist/index.js';
-import { createApp } from '../packages/server/src/app.js';
-import { TranslationWorker } from '../packages/server/src/worker.js';
-import { databasePath } from '../packages/server/src/paths.js';
+import { createApp } from '../packages/server/dist/app.js';
+import { TranslationWorker } from '../packages/server/dist/worker.js';
+import { databasePath } from '../packages/server/dist/paths.js';
 
 async function command(file: string, args: string[], env: Record<string, string> = {}) {
   return new Promise<{ code: number | null; output: string }>((done, reject) => {
@@ -19,8 +19,8 @@ async function command(file: string, args: string[], env: Record<string, string>
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let output = '';
-    child.stdout.on('data', (value) => (output += value));
-    child.stderr.on('data', (value) => (output += value));
+    child.stdout.on('data', (value: Buffer) => (output += value.toString()));
+    child.stderr.on('data', (value: Buffer) => (output += value.toString()));
     child.on('error', reject);
     child.on('exit', (code) => done({ code, output }));
   });
@@ -172,23 +172,29 @@ test('the documented JSON example translates, renders, updates and reuses unchan
     'Your changes are saved.': 'Deine Änderungen sind gespeichert.',
     'Create your first project': 'Erstelle dein erstes Projekt',
   };
-  const provider = createServer(async (request, response) => {
-    let content = '';
-    for await (const chunk of request) content += chunk;
-    const payload = JSON.parse(content),
-      input = JSON.parse(payload.messages[1].content);
-    calls++;
-    const value =
-      payload.model === 'reviewer'
-        ? { findings: [], summary: 'Fixture independent review' }
-        : { translation: translated[input.source] };
-    response.setHeader('Content-Type', 'application/json');
-    response.end(
-      JSON.stringify({
-        choices: [{ message: { content: JSON.stringify(value) } }],
-        usage: { prompt_tokens: 100, completion_tokens: 30 },
-      }),
-    );
+  const provider = createServer((request, response) => {
+    // node:http ignores the returned promise, so the async body runs detached.
+    void (async () => {
+      let content = '';
+      for await (const chunk of request) content += String(chunk);
+      const payload = JSON.parse(content) as {
+          model: string;
+          messages: Array<{ content: string }>;
+        },
+        input = JSON.parse(payload.messages[1]!.content) as { source: string };
+      calls++;
+      const value =
+        payload.model === 'reviewer'
+          ? { findings: [], summary: 'Fixture independent review' }
+          : { translation: translated[input.source] };
+      response.setHeader('Content-Type', 'application/json');
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(value) } }],
+          usage: { prompt_tokens: 100, completion_tokens: 30 },
+        }),
+      );
+    })();
   });
   await new Promise<void>((done) => provider.listen(0, '127.0.0.1', done));
   const directory = await mkdtemp(join(tmpdir(), 'everylocale-first-file-'));
@@ -304,7 +310,9 @@ test('the documented JSON example translates, renders, updates and reuses unchan
       'Erstelle dein erstes Projekt',
     );
     await run(['pull', '--project', 'first-app', '--output', join(directory, 'locales')]);
-    const pointer = JSON.parse(await readFile(join(directory, 'locales/current.json'), 'utf8'));
+    const pointer = JSON.parse(await readFile(join(directory, 'locales/current.json'), 'utf8')) as {
+      revision: string;
+    };
     const delivered = JSON.parse(
       await readFile(join(directory, 'locales/releases', pointer.revision, 'de.json'), 'utf8'),
     );

@@ -11,12 +11,17 @@ pnpm install --frozen-lockfile
 pnpm ci:local
 ```
 
-The local runner builds and checks the packages, runs the functional suite, packs the release, verifies a production Next.js consumer, runs Linux checks on Node 22 and 24, builds the service image, and tests the WordPress connector. Tests use local provider fixtures.
+`pnpm ci:host` runs the checks that need no Docker: build, type checks for packages, tests and tools, ESLint, unused-code detection (knip), formatting, the production dependency audit, the functional test suite, the release archives and a production Next.js consumer. `pnpm ci:local` adds Linux checks on Node 22 and 24, the service image and the WordPress connector. Tests use local provider fixtures and make no paid model calls.
 
 GitHub Actions runs on `master` updates. Pushes and pull requests to `develop` do not trigger the workflow.
 
 ## Changes
 
-Include a reproduction or example for behavioral changes. Tests should exercise the real parsers and SQLite state machine; use a local HTTP fixture for model transport. Keep credentials, customer data, local databases, and development notes out of commits.
+- Include a test for every behavior change, including its failure paths. Tests exercise the real parsers and SQLite state machine; use a local HTTP fixture for model transport.
+- Tests import the built packages from `packages/*/dist`, so run `pnpm build` before `pnpm test`.
+- Fix lint findings in the code. A rule exception needs a same-line reason: `// eslint-disable-next-line rule -- reason`.
+- Add a changeset for any change to a published package: `pnpm changeset`.
+- Ask before adding a dependency, and pin exact versions.
+- Keep credentials, customer data, local databases and development notes out of commits.
 
-Public documentation describes installation, configuration, APIs, and supported behavior. Keep planning notes and project-specific research outside the published documentation.
+Public documentation describes installation, configuration, APIs and supported behavior. Keep planning notes and project-specific research outside the published documentation. See [the security policy](SECURITY.md) for reporting vulnerabilities and [the code of conduct](CODE_OF_CONDUCT.md) for participation.

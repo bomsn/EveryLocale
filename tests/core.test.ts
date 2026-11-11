@@ -11,7 +11,7 @@ import {
   localizePath,
   alternates,
   rewriteHtmlLinks,
-} from '../packages/core/src/index.js';
+} from '../packages/core/dist/index.js';
 
 test('approved internal-link rendering preserves Gutenberg markup and escapes localized destinations', () => {
   const source =
@@ -100,7 +100,11 @@ test('HTML and Gutenberg preserve code, links, comments and escaped attributes',
   const source =
     '<!-- wp:paragraph --><p>Hello <strong>world</strong> <a href="https://example.test">Read</a></p><!-- /wp:paragraph --><img src="/x.png" alt="Our logo"><pre>const x = 1</pre><div translate="no">Brand</div>';
   const document = extractDocument(source, 'html', 'post');
-  assert.equal(document.units.length, 4);
+  // The paragraph is one sentence with protected inline markup; the image alt is separate.
+  assert.deepEqual(
+    document.units.map((unit) => unit.context),
+    ['HTML sentence inside p', 'alt on img'],
+  );
   const translations = Object.fromEntries(
     document.units.map((x) => [x.id, x.source === 'Our logo' ? 'Logo "quoted"' : `FR ${x.source}`]),
   );

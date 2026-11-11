@@ -33,7 +33,7 @@ Add your model settings to the generated `.env`, run `pnpm doctor` to check the 
 - App messages: JSON, YAML, PO, and declared React/ICU messages.
 - Written content: Markdown, MDX, HTML, and WordPress articles.
 - Your release process: CLI commands for GitHub Actions or another CI runner, plus a server-side HTTP API.
-- Your interface: React controls and request helpers for Remix 2 and Next.js, with Arabic direction, native language names, and multilingual SEO helpers.
+- Your interface: React controls and request helpers for server-rendered React and Next.js, with right-to-left direction, native language names, and multilingual SEO helpers.
 
 English, Arabic, Taiwan Chinese, German, Spanish, and French are included in the default locale registry. You can configure additional target languages. Your app still needs to render translated messages and provide localized routes; the [connection guide](docs/CONNECT.md) shows where that work belongs.
 

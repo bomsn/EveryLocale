@@ -14,7 +14,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build && pnpm typecheck && pnpm test
 FROM build AS verify
-RUN pnpm format:check && pnpm release:pack && pnpm test:next
+RUN pnpm lint && pnpm knip && pnpm format:check && pnpm release:pack && pnpm test:next
 
 FROM build AS production-deps
 # Retain the dependency versions verified in the build stage.

@@ -11,8 +11,8 @@ async function docker(args: string[], raw = false) {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let output = '';
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (output += chunk));
+    child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
     child.on('error', reject);
     child.on('exit', (code) =>
       code === 0
@@ -38,18 +38,24 @@ async function wp(...args: string[]) {
   }
 }
 const evaluate = (code: string) => wp('eval', code);
-async function api(path: string, method = 'GET', body?: unknown): Promise<any> {
+async function api(path: string, method = 'GET', body?: unknown): Promise<unknown> {
   const response = await fetch(`http://localhost:4312/api/v1${path}`, {
     method,
     headers: { authorization: `Bearer ${admin}`, 'content-type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  const result = await response.json();
+  const result: unknown = await response.json();
   if (!response.ok) throw new Error(JSON.stringify(result));
   return result;
 }
 const jobs = async (): Promise<TranslationRecord[]> =>
-  (await api('/projects/wordpress/jobs')).records;
+  ((await api('/projects/wordpress/jobs')) as { records: TranslationRecord[] }).records;
+const exportedMessages = async (): Promise<Record<string, string>> =>
+  ((await api('/projects/wordpress/exports/fr')) as { messages: Record<string, string> }).messages;
+function found<T>(value: T | undefined, description: string): T {
+  if (value === undefined) throw new Error(`WordPress smoke could not find ${description}`);
+  return value;
+}
 async function until(check: () => Promise<boolean>, timeout = 15000) {
   const end = Date.now() + timeout;
   while (!(await check())) {
@@ -127,10 +133,10 @@ try {
     targetLocales: ['fr'],
     budgetUsd: 1,
   });
-  const token = await api('/projects/wordpress/tokens', 'POST', {
+  const token = (await api('/projects/wordpress/tokens', 'POST', {
     scopes: ['read', 'import', 'translate', 'export'],
     expiresAt: Date.now() + 3600000,
-  });
+  })) as { token: string };
   for (let attempt = 0; ; attempt++) {
     try {
       await wp(
@@ -225,7 +231,10 @@ try {
   ).json()) as Array<{ id: number }>;
   assert.ok(frenchPosts.some((post) => post.id === targetId));
   assert.ok(!frenchPosts.some((post) => post.id === id));
-  const job = (await jobs()).find((job) => job.source.source === 'Hello world.')!;
+  const job = found(
+    (await jobs()).find((job) => job.source.source === 'Hello world.'),
+    'the Hello world. job',
+  );
   await api(`/projects/wordpress/jobs/${job.id}`, 'PATCH', {
     revision: job.revision,
     translation: 'Bonjour à tous.',
@@ -233,15 +242,21 @@ try {
   await until(
     async () => (await jobs()).find((candidate) => candidate.id === job.id)?.status === 'review',
   );
-  await approve((await jobs()).find((candidate) => candidate.id === job.id)!);
+  await approve(
+    found(
+      (await jobs()).find((candidate) => candidate.id === job.id),
+      `job ${job.id}`,
+    ),
+  );
   await evaluate(`EveryLocale_Connector::sync(${id});`);
   assert.match(await content(targetId), /Bonjour à tous/);
   console.log(
     'Approval publishes localized content, SEO links, and corrections to an already published source.',
   );
-  const slug = (await jobs()).find(
-    (candidate) => candidate.source.source === 'hello-localization',
-  )!;
+  const slug = found(
+    (await jobs()).find((candidate) => candidate.source.source === 'hello-localization'),
+    'the hello-localization slug job',
+  );
   await api(`/projects/wordpress/jobs/${slug.id}`, 'PATCH', {
     revision: slug.revision,
     translation: 'bonjour-ailleurs',
@@ -249,7 +264,12 @@ try {
   await until(
     async () => (await jobs()).find((candidate) => candidate.id === slug.id)?.status === 'review',
   );
-  await approve((await jobs()).find((candidate) => candidate.id === slug.id)!);
+  await approve(
+    found(
+      (await jobs()).find((candidate) => candidate.id === slug.id),
+      `job ${slug.id}`,
+    ),
+  );
   await evaluate(`EveryLocale_Connector::sync(${id});`);
   const redirected = await fetch('http://localhost:4313/fr/bonjour-localisation/', {
     redirect: 'manual',
@@ -287,7 +307,7 @@ try {
     }
   });
   await evaluate(`EveryLocale_Connector::deliver_withdrawal(${id});`);
-  assert.deepEqual((await api('/projects/wordpress/exports/fr')).messages, {});
+  assert.deepEqual(await exportedMessages(), {});
   await api('/projects/wordpress', 'PUT', {
     name: 'Disposable WordPress',
     targetLocales: ['fr'],
@@ -323,18 +343,18 @@ try {
   assert.ok(automaticTarget > 0);
   assert.equal(await status(automaticTarget), 'publish');
   assert.match(await content(automaticTarget), /Bonjour/);
-  const audit = await api('/projects/wordpress/audit');
+  const audit = (await api('/projects/wordpress/audit')) as Array<{
+    actor: string;
+    action: string;
+  }>;
   assert.ok(
-    audit.some(
-      (event: { actor: string; action: string }) =>
-        event.actor === 'automation' && event.action === 'translation.approve',
-    ),
+    audit.some((event) => event.actor === 'automation' && event.action === 'translation.approve'),
   );
   await evaluate(
     `wp_delete_post(${automaticSource},true);EveryLocale_Connector::deliver_withdrawal(${automaticSource});`,
   );
   assert.equal(await status(automaticTarget), 'draft');
-  assert.deepEqual((await api('/projects/wordpress/exports/fr')).messages, {});
+  assert.deepEqual(await exportedMessages(), {});
   console.log(
     'Human and automatic approval both publish through the real connector; deletion withdraws linked translations. WordPress end-to-end smoke passed.',
   );

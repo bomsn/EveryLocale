@@ -12,7 +12,6 @@ import {
   serviceUrl,
   type Project,
   type ApprovedCatalog,
-  type ExtractedDocument,
   type SourceUnit,
 } from '@everylocale/core';
 import { extractCode } from './extract-code.js';
@@ -21,19 +20,20 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { help } from './help.js';
 
 const [command, ...args] = process.argv.slice(2);
-const option = (name: string, fallback?: string) => {
+function option(name: string): string | undefined;
+function option(name: string, fallback: string): string;
+function option(name: string, fallback?: string) {
   const index = args.indexOf(`--${name}`);
   if (index < 0) return fallback;
   const value = args[index + 1];
   if (!value || value.startsWith('--')) throw new Error(`--${name} needs a value`);
   return value;
-};
+}
 const required = (name: string) => {
   const value = option(name);
   if (!value) throw new Error(`--${name} is required`);
   return value;
 };
-const formats = ['json', 'yaml', 'po', 'markdown', 'mdx', 'html'] as const;
 async function atomicWrite(path: string, content: string) {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -41,7 +41,7 @@ async function atomicWrite(path: string, content: string) {
   await rename(temporary, path);
 }
 async function api<T>(path: string, method = 'GET', body?: unknown, key?: string): Promise<T> {
-  const base = serviceUrl(option('url', process.env.EVERYLOCALE_URL ?? 'http://localhost:4310')!);
+  const base = serviceUrl(option('url', process.env.EVERYLOCALE_URL ?? 'http://localhost:4310'));
   const token = process.env.EVERYLOCALE_TOKEN;
   if (!token) throw new Error('Set EVERYLOCALE_TOKEN to a scoped project token');
   const response = await fetch(`${base.replace(/\/$/, '')}/api/v1${path}`, {
@@ -55,10 +55,18 @@ async function api<T>(path: string, method = 'GET', body?: unknown, key?: string
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  const data = await response.json();
+  const text = await response.text();
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    // A proxy or gateway error page is reported by its HTTP status.
+    throw new Error(`EveryLocale returned HTTP ${String(response.status)} without a JSON body`);
+  }
   if (!response.ok)
     throw new Error(
-      (data as { error?: { message: string } }).error?.message ?? `HTTP ${response.status}`,
+      (data as { error?: { message?: string } }).error?.message ??
+        `EveryLocale returned HTTP ${String(response.status)}`,
     );
   return data as T;
 }
@@ -83,8 +91,9 @@ async function main() {
     return;
   }
   if (command === 'extract-code') {
-    const units = await extractCode(await filesUnder(resolve(required('input'))));
-    const sourceLocale = option('source-locale', 'en')!;
+    const root = resolve(required('input'));
+    const units = await extractCode(await filesUnder(root), root);
+    const sourceLocale = option('source-locale', 'en');
     new Intl.Locale(sourceLocale);
     await atomicWrite(
       resolve(required('output')),
@@ -99,12 +108,9 @@ async function main() {
   }
   if (command === 'extract') {
     const content = await readFile(resolve(required('input')), 'utf8');
-    const format = required('format') as ExtractedDocument['format'];
-    if (!formats.includes(format)) throw new Error('Unsupported format');
-    const document = extractDocument(content, format, option('namespace', 'document'), {
-      groupInline: true,
-    });
-    const sourceLocale = option('source-locale', 'en')!;
+    const format = required('format');
+    const document = extractDocument(content, format, option('namespace', 'document'));
+    const sourceLocale = option('source-locale', 'en');
     new Intl.Locale(sourceLocale);
     await atomicWrite(
       resolve(required('output')),
@@ -210,11 +216,8 @@ async function main() {
     const catalog = approvedCatalogSchema.parse(
       JSON.parse(await readFile(resolve(required('catalog')), 'utf8')),
     );
-    const format = required('format') as ExtractedDocument['format'];
-    if (!formats.includes(format)) throw new Error('Unsupported format');
-    const document = extractDocument(content, format, option('namespace', 'document'), {
-      groupInline: true,
-    });
+    const format = required('format');
+    const document = extractDocument(content, format, option('namespace', 'document'));
     for (const unit of document.units) {
       if (catalog.sources[unit.id] !== hash({ ...unit, sourceLocale: catalog.sourceLocale }))
         throw new Error(`Approved source revision differs for ${unit.id}`);
@@ -255,7 +258,7 @@ async function main() {
   console.error(`Unknown command: ${command}. Use pnpm cli help.`);
   if (command && !['help', '--help', '-h'].includes(command)) process.exitCode = 1;
 }
-main().catch((error) => {
+main().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : 'Command failed');
   process.exitCode = 1;
 });

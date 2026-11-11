@@ -157,7 +157,9 @@ export async function modelCall(
   const usage = decoded.data.usage;
   if (!usage && (config.inputPrice > 0 || config.outputPrice > 0))
     throw new ProviderError('Metered provider did not return usage', false, 0, true);
-  const content = decoded.data.choices[0]!.message.content;
+  const [choice] = decoded.data.choices;
+  if (!choice) throw new ProviderError('Provider returned no choices', false, 0, true);
+  const content = choice.message.content;
   let value: unknown;
   const costUsd = usage
     ? (usage.prompt_tokens * config.inputPrice + usage.completion_tokens * config.outputPrice) / 1e6

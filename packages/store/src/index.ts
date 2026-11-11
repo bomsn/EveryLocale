@@ -12,7 +12,6 @@ import {
   validateTranslation,
   extractDocument,
   PIPELINE_REVISION,
-  type ExtractedDocument,
   type ApprovedCatalog,
   type Finding,
   type Project,
@@ -20,6 +19,20 @@ import {
   type TranslationRecord,
 } from '@everylocale/core';
 import { SCHEMA } from './schema.js';
+import {
+  decodeCatalog,
+  decodeFindings,
+  decodeScopes,
+  decodeSourceLocale,
+  decodeStrings,
+  decodeUnit,
+  dictionary,
+  documentRow,
+  tokenRow,
+  approvedSource,
+  SCOPES,
+  type Scope,
+} from './decode.js';
 import { deliveryMethods, type DeliveryStore } from './operations.js';
 export type { DeliveryStore, DeliveryEvent, Operations } from './operations.js';
 
@@ -46,7 +59,7 @@ type JobRow = {
 };
 type SourceRow = { data: string; source_hash: string; active: number };
 type PublicationRow = { unit_id: string; translation: string; source_hash: string };
-export type Scope = 'read' | 'import' | 'translate' | 'review' | 'approve' | 'export';
+export type { Scope } from './decode.js';
 export type JobFilters = {
   status?: TranslationRecord['status'];
   search?: string;
@@ -124,7 +137,7 @@ export interface LocalizationStore extends TranslationStore, DeliveryStore {
   importDocument(
     project: string,
     namespace: string,
-    format: ExtractedDocument['format'],
+    format: string,
     content: string,
   ): { changed: string[]; unchanged: string[]; units: string[]; sourceRevision: string };
   exportDocument(
@@ -143,7 +156,7 @@ export interface LocalizationStore extends TranslationStore, DeliveryStore {
     namespace: string,
     locale: string,
   ): {
-    format: ExtractedDocument['format'];
+    format: string;
     source: string;
     translation: string;
     sourceLocale: string;
@@ -208,11 +221,11 @@ function record(row: JobRow): TranslationRecord {
     locale: row.locale,
     sourceHash: row.source_hash,
     contextHash: row.context_hash,
-    source: JSON.parse(row.source_data),
+    source: decodeUnit(row.source_data),
     translation: row.translation,
     revision: row.revision,
     status: row.status,
-    findings: JSON.parse(row.findings),
+    findings: decodeFindings(row.findings),
     reviewSummary: row.review_summary,
     attempts: row.attempts,
     error: row.error,
@@ -299,7 +312,7 @@ export class SqliteStore implements LocalizationStore {
       const previous = this.db
         .prepare('SELECT config,spent,reserved FROM projects WHERE id=?')
         .get(project.id) as { config: string; spent: number; reserved: number } | undefined;
-      if (previous && JSON.parse(previous.config).sourceLocale !== project.sourceLocale)
+      if (previous && decodeSourceLocale(previous.config).sourceLocale !== project.sourceLocale)
         throw new ContractError(
           'source_locale',
           'Create a new project to change its source locale',
@@ -325,7 +338,7 @@ export class SqliteStore implements LocalizationStore {
         for (const job of jobs)
           if (
             !project.targetLocales.includes(job.locale) ||
-            contextHash(project, JSON.parse(job.source_data), job.locale) !== job.context_hash
+            contextHash(project, decodeUnit(job.source_data), job.locale) !== job.context_hash
           )
             this.stale(job);
       }
@@ -405,14 +418,9 @@ export class SqliteStore implements LocalizationStore {
       return { changed, unchanged };
     });
   }
-  importDocument(
-    projectId: string,
-    namespace: string,
-    format: ExtractedDocument['format'],
-    content: string,
-  ) {
+  importDocument(projectId: string, namespace: string, format: string, content: string) {
     const project = this.getProject(projectId);
-    const document = extractDocument(content, format, namespace, { groupInline: true });
+    const document = extractDocument(content, format, namespace);
     const units = document.units.map((x) => ({ ...x, sourceLocale: project.sourceLocale }));
     return this.transaction(() => {
       const previous = this.db
@@ -422,7 +430,7 @@ export class SqliteStore implements LocalizationStore {
       if (previous)
         this.withdraw(
           projectId,
-          (JSON.parse(previous.unit_ids) as string[]).filter((x) => !ids.includes(x)),
+          decodeStrings(previous.unit_ids).filter((x) => !ids.includes(x)),
           'connector',
         );
       const result = this.importSources(projectId, units);
@@ -440,10 +448,10 @@ export class SqliteStore implements LocalizationStore {
     const row = this.db
       .prepare('SELECT * FROM documents WHERE project_id=? AND namespace=?')
       .get(projectId, namespace) as
-      | { format: ExtractedDocument['format']; content: string; source_revision: string }
+      | { format: string; content: string; source_revision: string }
       | undefined;
     if (!row) throw new ContractError('not_found', 'Document not found', 404);
-    const document = extractDocument(row.content, row.format, namespace, { groupInline: true });
+    const document = extractDocument(row.content, row.format, namespace);
     const catalog = this.exportCatalog(projectId, locale);
     for (const unit of document.units) {
       if (catalog.sources[unit.id] !== sourceHash({ ...unit, sourceLocale: project.sourceLocale }))
@@ -477,11 +485,11 @@ export class SqliteStore implements LocalizationStore {
     const row = this.db
       .prepare('SELECT * FROM documents WHERE project_id=? AND namespace=?')
       .get(projectId, namespace) as
-      | { format: ExtractedDocument['format']; content: string; source_revision: string }
+      | { format: string; content: string; source_revision: string }
       | undefined;
     if (!row) throw new ContractError('not_found', 'Document not found', 404);
-    const document = extractDocument(row.content, row.format, namespace, { groupInline: true });
-    const translations: Record<string, string> = Object.create(null),
+    const document = extractDocument(row.content, row.format, namespace);
+    const translations = dictionary<string>(),
       pendingUnits: string[] = [];
     for (const rawUnit of document.units) {
       const unit = { ...rawUnit, sourceLocale: project.sourceLocale };
@@ -570,12 +578,12 @@ export class SqliteStore implements LocalizationStore {
             'idempotency_conflict',
             'This key was already used for a different revision',
           );
-        return (JSON.parse(previous.job_ids) as string[]).map((id) => this.getJob(projectId, id));
+        return decodeStrings(previous.job_ids).map((id) => this.getJob(projectId, id));
       }
       const ids: string[] = [];
       for (const { id: unitId, row } of units)
         for (const locale of targets) {
-          const source: SourceUnit = JSON.parse(row.data);
+          const source = decodeUnit(row.data);
           const context = contextHash(project, source, locale);
           const cached = this.db
             .prepare(
@@ -681,7 +689,7 @@ export class SqliteStore implements LocalizationStore {
     const search = filters.search?.toLocaleLowerCase();
     for (const raw of rows) {
       const row = raw as JobRow & { seq: number };
-      const unit = JSON.parse(row.source_data) as SourceUnit;
+      const unit = decodeUnit(row.source_data);
       if (
         sources &&
         (!project.targetLocales.includes(row.locale) ||
@@ -696,7 +704,8 @@ export class SqliteStore implements LocalizationStore {
         )
       )
         continue;
-      if (page.length === limit) return { records: page.map(record), cursor: page.at(-1)!.seq };
+      const last = page.at(-1);
+      if (last && page.length === limit) return { records: page.map(record), cursor: last.seq };
       page.push(row);
     }
     return { records: page.map(record), cursor: null };
@@ -740,7 +749,7 @@ export class SqliteStore implements LocalizationStore {
           untranslated: 0,
         };
         for (const source of sources.values()) {
-          const unit = JSON.parse(source.data) as SourceUnit;
+          const unit = decodeUnit(source.data);
           const job = jobs.get(`${unit.id}\0${locale}\0${contextHash(project, unit, locale)}`);
           if (!job || job.source_hash !== source.source_hash || job.status === 'stale')
             counts.untranslated++;
@@ -803,7 +812,7 @@ export class SqliteStore implements LocalizationStore {
         .all(this.now()) as JobRow[];
       for (const job of pending) {
         const project = this.getProject(job.project_id);
-        const unit: SourceUnit = JSON.parse(job.source_data);
+        const unit = decodeUnit(job.source_data);
         const source = this.source(job.project_id, job.unit_id);
         if (
           source.source_hash !== job.source_hash ||
@@ -896,7 +905,7 @@ export class SqliteStore implements LocalizationStore {
   complete(id: string, token: string, translation: string, findings: Finding[], summary: string) {
     this.transaction(() => {
       const job = this.leased(id, token);
-      const unit: SourceUnit = JSON.parse(job.source_data);
+      const unit = decodeUnit(job.source_data);
       const project = this.getProject(job.project_id);
       if (
         this.source(job.project_id, job.unit_id).source_hash !== job.source_hash ||
@@ -1081,8 +1090,8 @@ export class SqliteStore implements LocalizationStore {
     const project = this.getProject(projectId);
     if (locale !== project.sourceLocale && !project.targetLocales.includes(locale))
       throw new ContractError('locale', 'Locale is not configured', 422);
-    const messages: Record<string, string> = Object.create(null);
-    const sources: Record<string, string> = Object.create(null);
+    const messages = dictionary<string>();
+    const sources = dictionary<string>();
     const active = this.db
       .prepare(
         'SELECT unit_id,data,source_hash FROM sources WHERE project_id=? AND active=1 ORDER BY unit_id',
@@ -1095,7 +1104,7 @@ export class SqliteStore implements LocalizationStore {
       .all(projectId, locale) as PublicationRow[];
     if (locale === project.sourceLocale) {
       for (const row of active) {
-        messages[row.unit_id] = JSON.parse(row.data).source;
+        messages[row.unit_id] = decodeUnit(row.data).source;
         sources[row.unit_id] = row.source_hash;
       }
     } else {
@@ -1154,7 +1163,7 @@ export class SqliteStore implements LocalizationStore {
         .prepare('SELECT data FROM artifacts WHERE id=? AND project_id=? AND locale=?')
         .get(artifactId, projectId, locale) as { data: string } | undefined;
       if (!row) throw new ContractError('not_found', 'Approved artifact not found', 404);
-      const catalog: ApprovedCatalog = JSON.parse(row.data);
+      const catalog = decodeCatalog(row.data);
       this.db
         .prepare('DELETE FROM publications WHERE project_id=? AND locale=?')
         .run(projectId, locale);
@@ -1172,7 +1181,7 @@ export class SqliteStore implements LocalizationStore {
             unitId,
             locale,
             translation,
-            catalog.sources[unitId]!,
+            approvedSource(catalog, unitId),
             `artifact:${artifactId}`,
             0,
             this.now(),
@@ -1185,9 +1194,7 @@ export class SqliteStore implements LocalizationStore {
     this.getProject(projectId);
     if (
       !scopes.length ||
-      scopes.some(
-        (x) => !['read', 'import', 'translate', 'review', 'approve', 'export'].includes(x),
-      ) ||
+      scopes.some((x) => !SCOPES.includes(x)) ||
       !Number.isFinite(expiresAt) ||
       expiresAt <= this.now()
     )
@@ -1210,7 +1217,7 @@ export class SqliteStore implements LocalizationStore {
       | { id: string; project_id: string; scopes: string }
       | undefined;
     return row
-      ? { projectId: row.project_id, scopes: JSON.parse(row.scopes), actor: `token:${row.id}` }
+      ? { projectId: row.project_id, scopes: decodeScopes(row.scopes), actor: `token:${row.id}` }
       : null;
   }
   authenticateId(id: string): { projectId: string; scopes: Scope[]; actor: string } | null {
@@ -1220,7 +1227,7 @@ export class SqliteStore implements LocalizationStore {
       )
       .get(id, this.now()) as { id: string; project_id: string; scopes: string } | undefined;
     return row
-      ? { projectId: row.project_id, scopes: JSON.parse(row.scopes), actor: `token:${row.id}` }
+      ? { projectId: row.project_id, scopes: decodeScopes(row.scopes), actor: `token:${row.id}` }
       : null;
   }
   documents(projectId: string) {
@@ -1230,10 +1237,11 @@ export class SqliteStore implements LocalizationStore {
         'SELECT namespace,format,unit_ids,source_revision FROM documents WHERE project_id=? ORDER BY namespace',
       )
       .all(projectId)
-      .map((row: any) => ({
+      .map((row) => documentRow(row))
+      .map((row) => ({
         namespace: row.namespace,
         format: row.format,
-        units: JSON.parse(row.unit_ids),
+        units: decodeStrings(row.unit_ids),
         sourceRevision: row.source_revision,
       }));
   }
@@ -1244,7 +1252,10 @@ export class SqliteStore implements LocalizationStore {
         'SELECT id,scopes,created_at,expires_at,revoked FROM access_tokens WHERE project_id=? ORDER BY created_at DESC',
       )
       .all(projectId)
-      .map((row: any) => ({ ...row, scopes: JSON.parse(row.scopes) }));
+      .map((row) => {
+        const token = tokenRow(row);
+        return { ...token, scopes: decodeScopes(token.scopes) };
+      });
   }
   artifacts(projectId: string, locale?: string) {
     return this.db

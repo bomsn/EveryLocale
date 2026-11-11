@@ -53,7 +53,7 @@ pnpm cli pull --project first-app --output locales
 
 A failed translation stops delivery of the new release. The current deployed app remains available. Keep the previous release directory and previous application deployment for rollback. [Automate these steps in CI/CD](CI-CD.md) after the manual path works.
 
-## React, Remix, and Next.js
+## React and Next.js
 
 These packages let your interface display declared messages, choose language per request, and offer an accessible language selector. They do not identify arbitrary strings automatically: replace your app's user-visible strings with explicit messages.
 
@@ -100,7 +100,7 @@ export function Greeting() {
 
 Set the document language to `de` for this example. A multilingual app chooses the appropriate approved catalog on the server for each request and passes that same catalog to the browser.
 
-Use the [runtime guide](INTEGRATION.md) for Remix loaders, Next.js server layouts, the language selector, Arabic fonts, and public-page search metadata. `examples/next` contains a working App Router app.
+Use the [runtime guide](INTEGRATION.md) for server loaders, Next.js server layouts, the language selector, Arabic fonts, and public-page search metadata. `examples/next` contains a working App Router app.
 
 ## WordPress
 

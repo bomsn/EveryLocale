@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { SqliteStore } from '../packages/store/src/index.js';
+import { SqliteStore } from '../packages/store/dist/index.js';
 import { projectSchema, unitSchema, type Finding } from '../packages/core/dist/index.js';
-import { createApp } from '../packages/server/src/app.js';
-import { TranslationWorker } from '../packages/server/src/worker.js';
+import { createApp } from '../packages/server/dist/app.js';
+import { TranslationWorker } from '../packages/server/dist/worker.js';
 
 function fixture(mode: 'automatic' | 'human' = 'automatic') {
   const store = new SqliteStore(':memory:');
@@ -162,22 +162,25 @@ test('translation memory and restored source corrections receive a fresh automat
 
 test('real HTTP worker automatically approves and exports without a human approval endpoint', async () => {
   const calls: string[] = [];
-  const provider = createServer(async (request, response) => {
-    let body = '';
-    for await (const chunk of request) body += chunk;
-    const payload = JSON.parse(body);
-    calls.push(payload.model);
-    const value =
-      payload.model === 'reviewer'
-        ? { findings: [], summary: 'No material issues.' }
-        : { translation: 'Hallo {name}' };
-    response.setHeader('content-type', 'application/json');
-    response.end(
-      JSON.stringify({
-        choices: [{ message: { content: JSON.stringify(value) } }],
-        usage: { prompt_tokens: 20, completion_tokens: 10 },
-      }),
-    );
+  const provider = createServer((request, response) => {
+    // node:http ignores the returned promise, so the async body runs detached.
+    void (async () => {
+      let body = '';
+      for await (const chunk of request) body += String(chunk);
+      const payload = JSON.parse(body) as { model: string };
+      calls.push(payload.model);
+      const value =
+        payload.model === 'reviewer'
+          ? { findings: [], summary: 'No material issues.' }
+          : { translation: 'Hallo {name}' };
+      response.setHeader('content-type', 'application/json');
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(value) } }],
+          usage: { prompt_tokens: 20, completion_tokens: 10 },
+        }),
+      );
+    })();
   });
   await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
   const { store, enqueue } = fixture();

@@ -29,19 +29,20 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@formatjs/icu-messageformat-parser": "3.5.20",
+    "@formatjs/icu-messageformat-parser": "3.5.23",
     "gettext-parser": "9.1.1",
-    "intl-messageformat": "12.1.2",
+    "intl-messageformat": "12.1.5",
     "opencc-js": "1.4.2",
     "parse5": "8.0.1",
     "plural-forms": "0.5.5",
     "rehype-stringify": "10.0.1",
+    "remark-frontmatter": "5.0.0",
     "remark-mdx": "3.1.1",
     "remark-parse": "11.0.0",
     "remark-rehype": "11.1.2",
     "unified": "11.0.5",
     "yaml": "2.9.1",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/gettext-parser": "9.0.0"

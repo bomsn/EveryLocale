@@ -11,11 +11,10 @@ import {
 } from '../packages/core/dist/index.js';
 const [input, output] = process.argv.slice(2);
 if (!input || !output) throw new Error('Usage: pnpm benchmark samples.json results.json');
-let exists = false;
-try {
-  await access(output);
-  exists = true;
-} catch {}
+const exists = await access(output).then(
+  () => true,
+  () => false,
+);
 if (exists)
   throw new Error('Choose a new output file to retain previous billing and quality evidence');
 const samples = JSON.parse(await readFile(input, 'utf8')) as { project: unknown; units: unknown[] };
@@ -42,7 +41,7 @@ function provider(prefix: string): ProviderConfig {
 let usage: unknown[] = [];
 const generator = provider('EVERYLOCALE_GENERATOR'),
   reviewer = provider('EVERYLOCALE_REVIEWER');
-const results = [];
+const results: Array<Record<string, unknown>> = [];
 let totalCost = 0;
 let pendingReservation = 0;
 const save = () =>

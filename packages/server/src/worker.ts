@@ -79,12 +79,13 @@ export class TranslationWorker {
   };
   private async run(job: ClaimedJob) {
     const { id } = job.record;
-    let leaseLost = false;
+    // The heartbeat runs in a timer, so the flag lives in an object the closure can update.
+    const lease = { lost: false };
     const heartbeat = setInterval(() => {
       try {
         this.store.heartbeat(id, job.leaseToken);
       } catch {
-        leaseLost = true;
+        lease.lost = true;
       }
     }, 30000);
     try {
@@ -117,7 +118,7 @@ export class TranslationWorker {
               charge,
               this.abort.signal,
             );
-      if (!leaseLost)
+      if (!lease.lost)
         this.store.complete(
           id,
           job.leaseToken,
@@ -126,7 +127,7 @@ export class TranslationWorker {
           result.summary,
         );
     } catch (error) {
-      if (!leaseLost) {
+      if (!lease.lost) {
         const retry = error instanceof ProviderError && error.retryable;
         const delay = retry
           ? Math.max(

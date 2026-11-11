@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SqliteStore } from '../packages/store/src/index.js';
+import { SqliteStore } from '../packages/store/dist/index.js';
 import { projectSchema, unitSchema } from '../packages/core/dist/index.js';
 test('changed glossary or instructions retain manual wording for new independent review until its source changes', () => {
   const store = new SqliteStore(':memory:');
@@ -29,7 +29,7 @@ test('changed glossary or instructions retain manual wording for new independent
     assert.equal(store.exportCatalog('example', 'de').messages.welcome, 'Guten Tag {name}');
     claim = store.claim(() => 0)!;
     assert.equal(claim.reviewOnly, true);
-    store.complete(next.id, claim.leaseToken, next.translation!, [], 'Reviewed new guidance');
+    store.complete(next.id, claim.leaseToken, next.translation, [], 'Reviewed new guidance');
     assert.equal(store.exportCatalog('example', 'de', true).messages.welcome, 'Guten Tag {name}');
     store.importSources('example', [
       unitSchema.parse({ id: 'welcome', source: 'Goodbye {name}', kind: 'icu' }),

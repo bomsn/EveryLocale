@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SqliteStore } from '../packages/store/src/index.js';
+import { SqliteStore } from '../packages/store/dist/index.js';
 import {
   projectSchema,
   unitSchema,
   previewArguments,
   previewMessage,
 } from '../packages/core/dist/index.js';
-import { createApp } from '../packages/server/src/app.js';
+import { createApp } from '../packages/server/dist/app.js';
 
 test('coverage and filtered pagination include current sources beyond the first page and exclude stale approvals', () => {
   const store = new SqliteStore(':memory:');
@@ -21,8 +21,8 @@ test('coverage and filtered pagination include current sources beyond the first 
     store.saveProject(project);
     const units = Array.from({ length: 205 }, (_, index) =>
       unitSchema.parse({
-        id: 'message-' + index,
-        source: index === 204 ? 'Last searchable message' : 'Message ' + index,
+        id: `message-${index}`,
+        source: index === 204 ? 'Last searchable message' : `Message ${index}`,
       }),
     );
     store.importSources(project.id, units);

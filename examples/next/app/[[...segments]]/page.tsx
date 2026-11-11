@@ -3,7 +3,7 @@ import { nextMetadata, resolveRequest } from '@everylocale/adapters';
 import { DEFAULT_LOCALES } from '@everylocale/core';
 import { EveryLocaleProvider, Message, LocaleFlag } from '@everylocale/react';
 export const dynamic = 'force-dynamic';
-const pages: Record<string, { path: string; message: string; title: string }> = {
+const pages: Partial<Record<string, { path: string; message: string; title: string }>> = {
   en: { path: '/about', message: 'Hello {name}', title: 'About' },
   ar: { path: '/ar/about', message: 'مرحبًا {name}', title: 'حول التطبيق' },
   'zh-Hant-TW': { path: '/zh-tw/about', message: '你好 {name}', title: '關於' },
@@ -23,7 +23,9 @@ export async function generateMetadata({ params }: { params: Promise<{ segments?
     title: page.title,
     ...nextMetadata(
       'https://example.test',
-      Object.fromEntries(Object.entries(pages).map(([locale, item]) => [locale, item.path])),
+      Object.fromEntries(
+        Object.entries(pages).flatMap(([locale, item]) => (item ? [[locale, item.path]] : [])),
+      ),
       selected.locale,
     ),
   };
@@ -46,11 +48,16 @@ export default async function Page({ params }: { params: Promise<{ segments?: st
         <LocaleFlag locale={selected.locale} />
       </EveryLocaleProvider>
       <nav aria-label="Language">
-        {DEFAULT_LOCALES.filter((locale) => pages[locale.id]).map((locale) => (
-          <a key={locale.id} href={pages[locale.id]!.path} lang={locale.id}>
-            {locale.label}{' '}
-          </a>
-        ))}
+        {DEFAULT_LOCALES.flatMap((locale) => {
+          const counterpart = pages[locale.id];
+          return counterpart
+            ? [
+                <a key={locale.id} href={counterpart.path} lang={locale.id}>
+                  {locale.label}{' '}
+                </a>,
+              ]
+            : [];
+        })}
       </nav>
     </main>
   );

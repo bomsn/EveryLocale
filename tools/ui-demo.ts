@@ -27,11 +27,15 @@ const translations: Record<string, string> = {
   fr: 'Bienvenue, {name}',
 };
 for (let i = 0; i < 5; i++) {
-  const job = store.claim(() => 0)!;
+  const job = store.claim(() => 0);
+  if (!job) throw new Error('UI demo expected a queued translation job to claim');
+  const translation = translations[job.record.locale];
+  if (translation === undefined)
+    throw new Error(`UI demo has no demo wording for ${job.record.locale}`);
   store.complete(
     job.record.id,
     job.leaseToken,
-    translations[job.record.locale]!,
+    translation,
     [],
     'Demo wording for interface testing. No model or native-language evaluation was performed.',
   );
@@ -74,5 +78,5 @@ const stop = async () => {
   store.close();
   process.exit(0);
 };
-process.on('SIGINT', stop);
-process.on('SIGTERM', stop);
+process.on('SIGINT', () => void stop());
+process.on('SIGTERM', () => void stop());

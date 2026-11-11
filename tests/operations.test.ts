@@ -96,22 +96,25 @@ test('delivery survives restarts, obeys leases and retries, verifies signatures 
   const secret = 'independent-disposable-webhook-secret';
   const bodies: string[] = [];
   let calls = 0;
-  const receiver = createServer(async (request, response) => {
-    let body = '';
-    for await (const chunk of request) body += chunk;
-    assert.equal(
-      verifyDelivery(
-        body,
-        String(request.headers['x-everylocale-timestamp']),
-        String(request.headers['x-everylocale-signature']),
-        secret,
-      ),
-      true,
-    );
-    bodies.push(body);
-    calls++;
-    response.writeHead(calls === 1 ? 503 : 204);
-    response.end();
+  const receiver = createServer((request, response) => {
+    // node:http ignores the returned promise, so the async body runs detached.
+    void (async () => {
+      let body = '';
+      for await (const chunk of request) body += String(chunk);
+      assert.equal(
+        verifyDelivery(
+          body,
+          String(request.headers['x-everylocale-timestamp']),
+          String(request.headers['x-everylocale-signature']),
+          secret,
+        ),
+        true,
+      );
+      bodies.push(body);
+      calls++;
+      response.writeHead(calls === 1 ? 503 : 204);
+      response.end();
+    })();
   });
   await new Promise<void>((resolve) => receiver.listen(0, '127.0.0.1', resolve));
   const config = {

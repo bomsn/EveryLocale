@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SqliteStore } from '../packages/store/src/index.js';
+import { SqliteStore } from '../packages/store/dist/index.js';
 import { projectSchema, unitSchema, ContractError } from '../packages/core/dist/index.js';
 
 test('the final target locale can be disabled while approved history remains available for deliberate re-enabling', () => {

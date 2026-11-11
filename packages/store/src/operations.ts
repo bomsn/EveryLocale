@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { access, mkdir, rm, chmod } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { ContractError } from '@everylocale/core';
+import { decodeDetail } from './decode.js';
 
 export type DeliveryEvent = {
   id: string;
@@ -51,7 +52,7 @@ const event = (row: Row): DeliveryEvent => ({
   projectId: row.project_id,
   type: row.type,
   entityId: row.entity_id,
-  detail: JSON.parse(row.detail),
+  detail: decodeDetail(row.detail),
   createdAt: row.created_at,
   attempts: row.attempts,
 });

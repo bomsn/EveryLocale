@@ -2,13 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   resolveRequest,
-  remixMeta,
   nextMetadata,
   switchPage,
   PublishedRegistry,
-} from '../packages/adapters/src/index.js';
+} from '../packages/adapters/dist/index.js';
 
-test('Remix and Next adapters agree on URL ownership and published alternates', async () => {
+test('request resolution and Next.js metadata agree on URL ownership and published alternates', () => {
   const request = new Request('https://example.test/de/pricing', {
     headers: { cookie: 'el_locale=fr' },
   });
@@ -18,16 +17,13 @@ test('Remix and Next adapters agree on URL ownership and published alternates', 
     pathname: '/pricing',
   });
   const paths = { en: '/pricing', de: '/de/pricing' };
-  const remix = remixMeta('https://example.test', paths, 'de');
   const next = nextMetadata('https://example.test', paths, 'de');
-  assert.equal(remix[0]!.href, next.alternates.canonical);
+  assert.equal(next.alternates.canonical, 'https://example.test/de/pricing');
   assert.equal(next.alternates.languages['x-default'], 'https://example.test/pricing');
   assert.throws(() => nextMetadata('https://example.test', paths, 'fr'));
   assert.equal(switchPage('/blog/source', 'fr', paths), null);
-  const simultaneous = await Promise.all(
-    ['ar', 'de', 'fr', 'zh-tw'].map(async (prefix) =>
-      resolveRequest(new Request(`https://example.test/${prefix}/pricing`)),
-    ),
+  const simultaneous = ['ar', 'de', 'fr', 'zh-tw'].map((prefix) =>
+    resolveRequest(new Request(`https://example.test/${prefix}/pricing`)),
   );
   assert.deepEqual(
     simultaneous.map((x) => x.locale),

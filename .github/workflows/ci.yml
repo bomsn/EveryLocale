@@ -23,7 +23,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm knip
       - run: pnpm format:check
+      - run: pnpm audit:prod
       - run: pnpm test
       - run: pnpm release:pack
       - run: pnpm test:next
@@ -40,5 +43,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: docker build -t everylocale:0.2.0 .
+      - run: docker build -t everylocale:$(node -p "require('./package.json').version") .
       - run: pnpm test:wordpress

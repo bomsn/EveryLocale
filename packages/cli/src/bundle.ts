@@ -48,10 +48,8 @@ export async function activateBundle(directory: string, revision: string) {
   if (bundle.revision !== revision) throw new Error('Release checksum differs');
   // Verify every delivered file before exposing the revision to a consuming build.
   for (const catalog of bundle.catalogs) {
-    const file = JSON.parse(
-      await readFile(join(root, 'releases', revision, `${catalog.locale}.json`), 'utf8'),
-    );
-    if (JSON.stringify(file) !== JSON.stringify(catalog))
+    const file = await readFile(join(root, 'releases', revision, `${catalog.locale}.json`), 'utf8');
+    if (JSON.stringify(JSON.parse(file)) !== JSON.stringify(catalog))
       throw new Error('Delivered catalog differs');
   }
   const temporary = join(root, `.current.${randomUUID()}.tmp`);

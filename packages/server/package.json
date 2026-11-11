@@ -1,5 +1,24 @@
 {
-  "name":"@everylocale/server","version":"0.2.0","type":"module","license":"MIT","files":["dist","public"],
-  "scripts":{"build":"tsc -p tsconfig.json","typecheck":"tsc -p tsconfig.json --noEmit","start":"node --env-file-if-exists=../../.env dist/main.js","dev":"tsx --env-file-if-exists=../../.env src/main.ts"},
-  "dependencies":{"@everylocale/core":"workspace:*","@everylocale/store":"workspace:*","fastify":"5.12.5","@fastify/cookie":"11.1.2","@fastify/static":"10.1.5","zod":"4.6.5"}
+  "name": "@everylocale/server",
+  "version": "0.2.0",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "public"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node --env-file-if-exists=../../.env dist/main.js",
+    "dev": "tsx --env-file-if-exists=../../.env src/main.ts"
+  },
+  "dependencies": {
+    "@everylocale/core": "workspace:*",
+    "@everylocale/store": "workspace:*",
+    "@fastify/cookie": "11.1.5",
+    "@fastify/static": "10.1.10",
+    "fastify": "5.12.8",
+    "zod": "4.6.7"
+  }
 }

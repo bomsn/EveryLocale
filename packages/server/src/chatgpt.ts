@@ -28,17 +28,18 @@ const credentialsSchema = z.object({
   scope: z.string(),
   earliest_refresh_at: z.number().optional(),
 });
-type Credentials = z.infer<typeof credentialsSchema> & { expiresAt: number };
-type Account = {
-  id: string;
-  subject: string;
-  email: string;
-  label: string;
-  hostId: string;
-  credentials?: Credentials;
-  paused?: string;
-  welcomed?: boolean;
-};
+const storedCredentialsSchema = credentialsSchema.extend({ expiresAt: z.number() });
+const accountSchema = z.object({
+  id: z.string(),
+  subject: z.string(),
+  email: z.string(),
+  label: z.string(),
+  hostId: z.string(),
+  credentials: storedCredentialsSchema.optional(),
+  paused: z.string().optional(),
+  welcomed: z.boolean().optional(),
+});
+type Account = z.infer<typeof accountSchema>;
 type Fetcher = typeof fetch;
 const safeCode = (value: unknown) =>
   typeof value === 'string' && /^[a-z0-9_]{1,100}$/.test(value) ? value : 'unknown_error';
@@ -63,7 +64,7 @@ export class ChatGptConnection {
       throw new Error('ChatGPT credential key must be 32 random bytes encoded as hex');
     this.key = Buffer.from(secret, 'hex');
   }
-  private read<T>(id: string): T | undefined {
+  private read<T>(id: string, schema: z.ZodType<T>): T | undefined {
     const row = this.store.db.prepare('SELECT data FROM auth_vault WHERE id=?').get(id) as
       | { data: string }
       | undefined;
@@ -73,9 +74,8 @@ export class ChatGptConnection {
       const cipher = createDecipheriv('aes-256-gcm', this.key, data.subarray(0, 12));
       cipher.setAAD(Buffer.from(id));
       cipher.setAuthTag(data.subarray(12, 28));
-      return JSON.parse(
-        Buffer.concat([cipher.update(data.subarray(28)), cipher.final()]).toString('utf8'),
-      ) as T;
+      const plain = Buffer.concat([cipher.update(data.subarray(28)), cipher.final()]);
+      return schema.parse(JSON.parse(plain.toString('utf8')));
     } catch {
       throw new Error(
         'ChatGPT credentials could not be decrypted; retain the original encryption key',
@@ -97,7 +97,7 @@ export class ChatGptConnection {
   hostId() {
     return this.store.db
       .transaction(() => {
-        let id = this.read<string>('host');
+        let id = this.read('host', z.string());
         if (!id) {
           id = `urn:uuid:${randomUUID()}`;
           this.write('host', id);
@@ -107,7 +107,7 @@ export class ChatGptConnection {
       .immediate();
   }
   private account(id: string): Account {
-    const account = this.read<Account>(`account:${id}`);
+    const account = this.read(`account:${id}`, accountSchema);
     if (!account)
       throw new ProviderError('Choose a saved ChatGPT account or continue with ChatGPT');
     return account;
@@ -136,7 +136,7 @@ export class ChatGptConnection {
       !account.paused,
     );
   }
-  private async locked<T>(id: string, operation: (token: string) => Promise<T>) {
+  private async locked<T>(id: string, operation: (token: string) => T | Promise<T>) {
     const token = randomUUID(),
       deadline = Date.now() + 20000;
     for (;;) {
@@ -248,13 +248,14 @@ export class ChatGptConnection {
   }
   private async identity(jwt: string, clientId: string, nonce: string) {
     if (jwt.length > 32000) throw new Error('Invalid identity token');
-    const parts = jwt.split('.');
-    if (parts.length !== 3) throw new Error('Invalid identity token');
-    const header = JSON.parse(Buffer.from(parts[0]!, 'base64url').toString('utf8')) as {
+    const [encodedHeader, encodedClaims, signature, ...rest] = jwt.split('.');
+    if (!encodedHeader || !encodedClaims || !signature || rest.length)
+      throw new Error('Invalid identity token');
+    const header = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8')) as {
       alg: string;
       kid: string;
     };
-    const claims = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8')) as {
+    const claims = JSON.parse(Buffer.from(encodedClaims, 'base64url').toString('utf8')) as {
       iss: string;
       aud: string | string[];
       exp: number;
@@ -284,9 +285,9 @@ export class ChatGptConnection {
       !jwk ||
       !verify(
         'RSA-SHA256',
-        Buffer.from(`${parts[0]}.${parts[1]}`),
+        Buffer.from(`${encodedHeader}.${encodedClaims}`),
         createPublicKey({ key: jwk, format: 'jwk' }),
-        Buffer.from(parts[2]!, 'base64url'),
+        Buffer.from(signature, 'base64url'),
       )
     )
       throw new Error('Identity signature could not be verified');
@@ -331,80 +332,85 @@ export class ChatGptConnection {
     // Callback failures may arrive before an asynchronous authorization display finishes.
     void completed.catch(() => {});
     let redirect = '';
-    const server = createServer(async (request, response) => {
-      response.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      response.setHeader('Cache-Control', 'no-store');
-      response.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
-      try {
-        const url = new URL(request.url ?? '', redirect);
-        if (request.method !== 'GET' || url.pathname !== '/auth/callback' || used) {
-          response.writeHead(404).end('Not found');
-          return;
-        }
-        const actual = url.searchParams.get('state') ?? '';
-        if (
-          Buffer.byteLength(actual) !== Buffer.byteLength(state) ||
-          !timingSafeEqual(Buffer.from(actual), Buffer.from(state))
-        ) {
-          response.writeHead(400).end('Invalid sign-in state');
-          return;
-        }
-        used = true;
-        if (url.searchParams.has('error'))
-          throw new Error('ChatGPT sign-in was declined. Your existing connection was preserved.');
-        const id = url.searchParams.get('client_id') ?? existing?.id;
-        const code = url.searchParams.get('code');
-        if (
-          !id ||
-          !/^oaiapp_[A-Za-z0-9_-]+$/.test(id) ||
-          !code ||
-          code.length > 16000 ||
-          (existing && id !== existing.id)
-        )
-          throw new Error('Incomplete or mismatched ChatGPT registration');
-        const tokens = await this.form(TOKEN, {
-          grant_type: 'authorization_code',
-          client_id: id,
-          code,
-          code_verifier: verifier,
-          redirect_uri: redirect,
-          resource: API,
-        });
-        if (!tokens.id_token) throw new Error('ChatGPT did not return a verifiable identity');
-        const identity = await this.identity(tokens.id_token, id, nonce);
-        const previous = this.read<Account>(`account:${id}`);
-        if (
-          (existing && existing.subject !== identity.sub) ||
-          (previous && previous.subject !== identity.sub)
-        )
-          throw new Error('ChatGPT identity differs from the selected account');
-        const enabled = tokens.scope.split(' ').includes('chatgpt.tokens.use.direct'),
-          firstUse = enabled && !previous?.welcomed;
-        await this.locked(id, async (lease) => {
-          this.saveLocked(id, lease, {
-            id,
-            subject: identity.sub,
-            email: identity.email ?? '',
-            label: options.label?.slice(0, 120) ?? previous?.label ?? `ChatGPT ${id.slice(-8)}`,
-            hostId: this.hostId(),
-            credentials: { ...tokens, expiresAt: Date.now() + tokens.expires_in * 1000 },
-            welcomed: enabled || previous?.welcomed,
+    // The handler settles every outcome itself, including failures, so its promise is not awaited.
+    const server = createServer((request, response) => {
+      void (async () => {
+        response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        response.setHeader('Cache-Control', 'no-store');
+        response.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+        try {
+          const url = new URL(request.url ?? '', redirect);
+          if (request.method !== 'GET' || url.pathname !== '/auth/callback' || used) {
+            response.writeHead(404).end('Not found');
+            return;
+          }
+          const actual = url.searchParams.get('state') ?? '';
+          if (
+            Buffer.byteLength(actual) !== Buffer.byteLength(state) ||
+            !timingSafeEqual(Buffer.from(actual), Buffer.from(state))
+          ) {
+            response.writeHead(400).end('Invalid sign-in state');
+            return;
+          }
+          used = true;
+          if (url.searchParams.has('error'))
+            throw new Error(
+              'ChatGPT sign-in was declined. Your existing connection was preserved.',
+            );
+          const id = url.searchParams.get('client_id') ?? existing?.id;
+          const code = url.searchParams.get('code');
+          if (
+            !id ||
+            !/^oaiapp_[A-Za-z0-9_-]+$/.test(id) ||
+            !code ||
+            code.length > 16000 ||
+            (existing && id !== existing.id)
+          )
+            throw new Error('Incomplete or mismatched ChatGPT registration');
+          const tokens = await this.form(TOKEN, {
+            grant_type: 'authorization_code',
+            client_id: id,
+            code,
+            code_verifier: verifier,
+            redirect_uri: redirect,
+            resource: API,
           });
-        });
-        response
-          .writeHead(200)
-          .end(
-            enabled
-              ? 'Connected. Eligible requests use your ChatGPT plan. Manage usage at https://chatgpt.com/settings/usage. You may close this tab.'
-              : 'Signed in. ChatGPT plan usage is disabled. Enable permission or use another provider. You may close this tab.',
+          if (!tokens.id_token) throw new Error('ChatGPT did not return a verifiable identity');
+          const identity = await this.identity(tokens.id_token, id, nonce);
+          const previous = this.read(`account:${id}`, accountSchema);
+          if (
+            (existing && existing.subject !== identity.sub) ||
+            (previous && previous.subject !== identity.sub)
+          )
+            throw new Error('ChatGPT identity differs from the selected account');
+          const enabled = tokens.scope.split(' ').includes('chatgpt.tokens.use.direct'),
+            firstUse = enabled && !previous?.welcomed;
+          await this.locked(id, (lease) => {
+            this.saveLocked(id, lease, {
+              id,
+              subject: identity.sub,
+              email: identity.email ?? '',
+              label: options.label?.slice(0, 120) ?? previous?.label ?? `ChatGPT ${id.slice(-8)}`,
+              hostId: this.hostId(),
+              credentials: { ...tokens, expiresAt: Date.now() + tokens.expires_in * 1000 },
+              welcomed: enabled || previous?.welcomed,
+            });
+          });
+          response
+            .writeHead(200)
+            .end(
+              enabled
+                ? 'Connected. Eligible requests use your ChatGPT plan. Manage usage at https://chatgpt.com/settings/usage. You may close this tab.'
+                : 'Signed in. ChatGPT plan usage is disabled. Enable permission or use another provider. You may close this tab.',
+            );
+          settle({ id, enabled, firstUse });
+        } catch {
+          response.writeHead(400).end('Sign-in could not be completed. Return to EveryLocale.');
+          reject(
+            new Error('ChatGPT sign-in could not be completed; existing accounts were preserved'),
           );
-        settle({ id, enabled, firstUse });
-      } catch {
-        response.writeHead(400).end('Sign-in could not be completed. Return to EveryLocale.');
-        reject(
-          new Error('ChatGPT sign-in could not be completed; existing accounts were preserved'),
-        );
-      }
+        }
+      })();
     });
     await new Promise<void>((yes, no) => {
       server.once('error', no);
@@ -477,7 +483,9 @@ export class ChatGptConnection {
           });
           revoked = response.status === 200;
           await response.body?.cancel();
-        } catch {}
+        } catch {
+          // Remote revocation is best effort; the local credentials are deleted either way.
+        }
       delete account.credentials;
       account.paused = 'sign_in_required';
       this.saveLocked(id, lease, account);
@@ -485,7 +493,7 @@ export class ChatGptConnection {
     });
   }
   async resume(id: string) {
-    await this.locked(id, async (lease) => {
+    await this.locked(id, (lease) => {
       const account = this.account(id);
       delete account.paused;
       this.saveLocked(id, lease, account);
@@ -506,7 +514,7 @@ export class ChatGptConnection {
         'subscription_sharing_user_not_eligible',
       ].includes(safe)
     )
-      await this.locked(id, async (lease) => {
+      await this.locked(id, (lease) => {
         const account = this.account(id);
         account.paused = safe;
         this.saveLocked(id, lease, account);
@@ -556,7 +564,9 @@ export class ChatGptConnection {
           let code: unknown;
           try {
             code = ((await this.json(response)) as { error?: { code?: unknown } }).error?.code;
-          } catch {}
+          } catch {
+            // An unreadable error body is reported with the HTTP status alone.
+          }
           return this.failure(
             id,
             response.status,

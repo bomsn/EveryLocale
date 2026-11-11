@@ -15,27 +15,30 @@ async function waitFor(check: () => boolean) {
 
 test('real provider throttling retries safely, preserves charges, and leaves publication awaiting approval', async () => {
   let calls = 0;
-  const server = createServer(async (request, response) => {
-    let body = '';
-    for await (const chunk of request) body += chunk;
-    calls++;
-    if (calls === 1) {
-      response.writeHead(429, { 'retry-after': '0' });
-      response.end();
-      return;
-    }
-    const payload = JSON.parse(body);
-    const value =
-      payload.model === 'reviewer'
-        ? { findings: [], summary: 'Transport fixture review' }
-        : { translation: 'Hallo' };
-    response.setHeader('content-type', 'application/json');
-    response.end(
-      JSON.stringify({
-        choices: [{ message: { content: JSON.stringify(value) } }],
-        usage: { prompt_tokens: 40, completion_tokens: 10 },
-      }),
-    );
+  const server = createServer((request, response) => {
+    // node:http ignores the returned promise, so the async body runs detached.
+    void (async () => {
+      let body = '';
+      for await (const chunk of request) body += String(chunk);
+      calls++;
+      if (calls === 1) {
+        response.writeHead(429, { 'retry-after': '0' });
+        response.end();
+        return;
+      }
+      const payload = JSON.parse(body) as { model: string };
+      const value =
+        payload.model === 'reviewer'
+          ? { findings: [], summary: 'Transport fixture review' }
+          : { translation: 'Hallo' };
+      response.setHeader('content-type', 'application/json');
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(value) } }],
+          usage: { prompt_tokens: 40, completion_tokens: 10 },
+        }),
+      );
+    })();
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const provider = {

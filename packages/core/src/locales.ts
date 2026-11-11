@@ -5,6 +5,38 @@ export type LocaleDefinition = {
   prefix: string;
   flag: string | null;
 };
+/** ISO 15924 scripts written right to left. */
+const RTL_SCRIPTS: ReadonlySet<string> = new Set([
+  'Adlm',
+  'Arab',
+  'Hebr',
+  'Mand',
+  'Mend',
+  'Nkoo',
+  'Rohg',
+  'Samr',
+  'Syrc',
+  'Thaa',
+  'Yezi',
+]);
+export type LocaleTraits = {
+  language: string;
+  /** Explicit or likely script, so `zh-TW` and `zh-Hant-TW` both report `Hant`. */
+  script: string | undefined;
+  region: string | undefined;
+  direction: 'ltr' | 'rtl';
+};
+/** Script, region and direction come from CLDR likely subtags, never from string prefixes. */
+export function localeTraits(id: string): LocaleTraits {
+  const locale = new Intl.Locale(id);
+  const likely = locale.maximize();
+  return {
+    language: locale.language,
+    script: likely.script,
+    region: locale.region ?? likely.region,
+    direction: likely.script && RTL_SCRIPTS.has(likely.script) ? 'rtl' : 'ltr',
+  };
+}
 export const DEFAULT_LOCALES: readonly LocaleDefinition[] = [
   { id: 'en', label: 'English', direction: 'ltr', prefix: '', flag: null },
   { id: 'ar', label: 'العربية', direction: 'rtl', prefix: 'ar', flag: 'sa' },

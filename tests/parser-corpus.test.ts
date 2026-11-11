@@ -2,9 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractDocument, validateTranslation, unitSchema } from '../packages/core/dist/index.js';
 import { createRequire } from 'node:module';
+// intl-messageformat is a dependency of the core package only, so its types are not
+// resolvable from tests; this local shape covers the constructor and format call used here.
 const { IntlMessageFormat } = createRequire(
   new URL('../packages/core/package.json', import.meta.url),
-)('intl-messageformat');
+)('intl-messageformat') as {
+  IntlMessageFormat: new (
+    message: string,
+    locale: string,
+  ) => { format(values: Record<string, unknown>): unknown };
+};
 
 test('nested selectors, exact numbers, rich tags and Arabic plural branches survive rendering', () => {
   const source =
@@ -19,7 +26,7 @@ test('nested selectors, exact numbers, rich tags and Arabic plural branches surv
       role: 'owner',
       name: 'Ali',
       count,
-      strong: (chunks: any) => chunks.join(''),
+      strong: (chunks: string[]) => chunks.join(''),
     });
     assert.match(String(text), /Ali/);
     assert.doesNotMatch(String(text), /projects/);
@@ -34,7 +41,7 @@ test('nested selectors, exact numbers, rich tags and Arabic plural branches surv
 test('Gutenberg nested blocks preserve comments, protected code, attributes and mixed-direction identifiers', () => {
   const source =
     '<!-- wp:group {"layout":{"type":"constrained"}} --><div class="wp-block-group"><!-- wp:paragraph --><p>Read <a href="/guide?q=1&amp;x=2"><strong>the guide</strong></a> for <code>API_KEY</code> and <bdi dir="ltr">AB-123</bdi>.</p><!-- /wp:paragraph --><img src="/image.jpg" alt="Team photo" title="Our team"><input aria-label="Your email" placeholder="Enter email"><p translate="no">Immutable brand</p><svg><text>Untouched SVG</text></svg></div><!-- /wp:group -->';
-  const doc = extractDocument(source, 'html', 'article', { groupInline: true });
+  const doc = extractDocument(source, 'html', 'article');
   const messages = Object.fromEntries(
     doc.units.map((u) => [
       u.id,
@@ -101,7 +108,7 @@ test('MDX components, JSX attributes, expressions, fenced samples and reference 
   assert.throws(
     () =>
       doc.render(
-        { ...messages, [doc.units[0]!.id]: messages[doc.units[0]!.id] + '{executeUntrusted()}' },
+        { ...messages, [doc.units[0]!.id]: `${messages[doc.units[0]!.id]!}{executeUntrusted()}` },
         'de',
       ),
     /structure/,

@@ -6,7 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import {
   ContractError,
-  extractDocument,
+  isFormat,
   projectSchema,
   unitSchema,
   previewMessage,
@@ -27,6 +27,11 @@ export type AppConfig = {
   providersReady: boolean;
   connection?: ChatGptConnection;
 };
+const sessionSchema = z.object({
+  expires: z.number(),
+  csrf: z.string().min(1),
+  tokenId: z.string().optional(),
+});
 type Identity = { owner: boolean; actor: string; projectId?: string; scopes: Scope[] };
 const allScopes: Scope[] = ['read', 'import', 'translate', 'review', 'approve', 'export'];
 const equal = (a: string, b: string) =>
@@ -75,6 +80,16 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
       `default-src 'self'; script-src 'self'; style-src 'self' 'nonce-${styleNonce}'; img-src 'self' data:; frame-src 'self' about:; frame-ancestors 'none'; object-src 'none'; base-uri 'none'`,
     );
   });
+  const readSession = (request: FastifyRequest) => {
+    const signed = request.cookies.el_session;
+    const verified = signed ? request.unsignCookie(signed) : null;
+    if (!verified?.valid || !verified.value) return null;
+    try {
+      return sessionSchema.parse(JSON.parse(verified.value));
+    } catch {
+      return null;
+    }
+  };
   const identity = (request: FastifyRequest): Identity => {
     const authorization = request.headers.authorization;
     if (authorization?.startsWith('Bearer ')) {
@@ -85,17 +100,9 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
       if (scoped) return { owner: false, ...scoped };
       throw new ContractError('unauthorized', 'Authentication required', 401);
     }
-    const signed = request.cookies.el_session;
-    const verified = signed ? request.unsignCookie(signed) : null;
-    if (!verified?.valid || !verified.value)
-      throw new ContractError('unauthorized', 'Authentication required', 401);
-    let session: { expires: number; csrf: string; tokenId?: string };
-    try {
-      session = JSON.parse(verified.value);
-    } catch {
-      throw new ContractError('unauthorized', 'Authentication required', 401);
-    }
-    if (session.expires <= Date.now() || !session.csrf)
+    const session = readSession(request);
+    if (!session) throw new ContractError('unauthorized', 'Authentication required', 401);
+    if (session.expires <= Date.now())
       throw new ContractError('unauthorized', 'Session expired', 401);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
       if (
@@ -166,12 +173,10 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
   });
   app.get('/api/v1/session', async (request) => {
     const user = identity(request);
-    const signed = request.cookies.el_session;
-    const decoded = signed ? request.unsignCookie(signed) : null;
     return {
       owner: user.owner,
       scopes: user.scopes,
-      csrf: decoded?.valid ? JSON.parse(decoded.value!).csrf : null,
+      csrf: readSession(request)?.csrf ?? null,
       providersReady: config.providersReady,
     };
   });
@@ -219,7 +224,7 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
   app.post('/api/v1/deliveries/:id/retry', async (request) => {
     if (!identity(request).owner)
       throw new ContractError('forbidden', 'Only the owner can retry delivery', 403);
-    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const { id } = z.object({ id: z.uuid() }).parse(request.params);
     store.retryDelivery(id);
     return { ok: true };
   });
@@ -270,7 +275,7 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
     const body = z
       .object({
         content: z.string(),
-        format: z.enum(['json', 'yaml', 'po', 'markdown', 'mdx', 'html']),
+        format: z.string().refine(isFormat, 'Unsupported document format'),
         namespace: z.string().min(1).max(160),
       })
       .parse(request.body);

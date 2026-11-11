@@ -1,0 +1,46 @@
+name: Bug report
+description: Something does not work as the documentation describes.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Report security problems privately through a security advisory, not here. Remove credentials, customer content and personal data from everything you paste.
+  - type: input
+    id: version
+    attributes:
+      label: EveryLocale version
+      description: The version in the root package.json, or the package versions your app installs.
+      placeholder: 0.3.0
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Service or workspace
+        - CLI
+        - Runtime, React or a framework adapter
+        - Parsers and file formats
+        - WordPress connector
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest configuration, input file and commands that show the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Node.js 22.16, Ubuntu 24.04, Docker 28

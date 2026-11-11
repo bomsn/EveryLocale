@@ -16,7 +16,7 @@ export type AdapterOptions = {
   profileLocale?: string | null;
   privateSurface?: boolean;
 };
-/** Works with a Remix 2 loader's Request and a Next.js server Request alike. */
+/** Accepts any Fetch API Request, as server frameworks pass to loaders and route handlers. */
 export function resolveRequest(request: Request, options: AdapterOptions = {}) {
   const url = new URL(request.url);
   const locales = options.locales ?? DEFAULT_LOCALES;
@@ -27,25 +27,13 @@ export function resolveRequest(request: Request, options: AdapterOptions = {}) {
     cookie: readLocaleCookie(request.headers.get('cookie')),
     locales,
   });
-  const definition = locales.find((x) => x.id === locale)!;
+  const definition = locales.find((x) => x.id === locale);
+  if (!definition) throw new Error(`Locale ${locale} is not in the configured registry`);
   return {
     locale,
     direction: definition.direction,
     pathname: localeFromPath(url.pathname, locales).pathname,
   };
-}
-export function remixMeta(origin: string, paths: Record<string, string>, locale: string) {
-  const path = paths[locale];
-  if (!path) throw new Error('Requested page translation is unpublished');
-  return [
-    { tagName: 'link', rel: 'canonical', href: new URL(path, origin).href },
-    ...alternates(origin, paths).map((x) => ({
-      tagName: 'link',
-      rel: 'alternate',
-      hrefLang: x.hreflang,
-      href: x.href,
-    })),
-  ];
 }
 export function nextMetadata(origin: string, paths: Record<string, string>, locale: string) {
   const path = paths[locale];

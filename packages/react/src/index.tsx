@@ -9,7 +9,7 @@ import {
   languageSuggestion,
   type LocaleDefinition,
 } from '@everylocale/core/locales';
-import { useState, useEffect, useId } from 'react';
+import { useState, useId, useSyncExternalStore } from 'react';
 import { FLAGS } from './flags.js';
 
 export type RuntimeCatalog = Pick<ApprovedCatalog, 'locale' | 'messages' | 'revision'>;
@@ -87,17 +87,19 @@ export function LanguageSelector({
         value={locale}
         disabled={pending}
         aria-busy={pending}
-        onChange={async (event) => {
+        onChange={(event) => {
           const target = event.target.value;
           setPending(true);
           setError('');
-          try {
-            await onChange(target);
-          } catch {
-            setError(errorMessage);
-          } finally {
-            setPending(false);
-          }
+          void (async () => {
+            try {
+              await onChange(target);
+            } catch {
+              setError(errorMessage);
+            } finally {
+              setPending(false);
+            }
+          })();
         }}
       >
         {locales.map((item) => (
@@ -111,59 +113,66 @@ export function LanguageSelector({
   );
 }
 
-/** Browser preferences produce a dismissible suggestion, never a redirect or preference write. */
+const subscribeToLanguages = (onChange: () => void) => {
+  window.addEventListener('languagechange', onChange);
+  return () => {
+    window.removeEventListener('languagechange', onChange);
+  };
+};
+// Joined so the snapshot is a stable primitive; server rendering and hydration see no preference.
+const browserLanguages = () => navigator.languages.join(',');
+const noLanguages = () => '';
+
+export type LanguageSuggestionLabels = {
+  /** Accessible name of the suggestion region. */
+  region: string;
+  /** Renders the prompt; `language` is the suggested language's native name, already isolated. */
+  prompt: (language: ReactNode) => ReactNode;
+  accept: (language: ReactNode) => ReactNode;
+  dismiss: string;
+};
+
+/**
+ * Suggests the visitor's browser language after hydration. It never redirects and never saves a
+ * preference: the host decides what `onAccept` does and where a dismissal is remembered.
+ */
 export function LanguageSuggestion({
   locale,
-  onChoose,
   locales = DEFAULT_LOCALES,
+  dismissed,
+  onAccept,
+  onDismiss,
   labels,
 }: {
   locale: string;
-  onChoose: (locale: string) => void;
   locales?: readonly LocaleDefinition[];
-  labels?: {
-    suggestion?: string;
-    useLanguage?: (languageName: ReactNode) => ReactNode;
-    dismiss?: string;
-    dismissAriaLabel?: string;
-  };
+  dismissed: boolean;
+  onAccept: (locale: string) => void;
+  onDismiss: () => void;
+  labels: LanguageSuggestionLabels;
 }) {
-  const [suggestion, setSuggestion] = useState<string | null>(null);
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem('everylocale-suggestion-dismissed')) return;
-    } catch {}
-    setSuggestion(languageSuggestion(navigator.languages, locale, locales));
-  }, [locale, locales]);
+  const preferences = useSyncExternalStore(subscribeToLanguages, browserLanguages, noLanguages);
+  if (dismissed || !preferences) return null;
+  const suggestion = languageSuggestion(preferences.split(','), locale, locales);
   if (!suggestion) return null;
-  const label = locales.find((item) => item.id === suggestion)?.label ?? suggestion;
+  const name = (
+    <bdi lang={suggestion}>
+      {locales.find((item) => item.id === suggestion)?.label ?? suggestion}
+    </bdi>
+  );
   return (
-    <aside aria-label={labels?.suggestion ?? 'Language suggestion'}>
-      <bdi lang={suggestion}>{label}</bdi>?{' '}
+    <aside aria-label={labels.region}>
+      {labels.prompt(name)}{' '}
       <button
+        type="button"
         onClick={() => {
-          onChoose(suggestion);
-          setSuggestion(null);
+          onAccept(suggestion);
         }}
       >
-        {labels?.useLanguage ? (
-          labels.useLanguage(<bdi lang={suggestion}>{label}</bdi>)
-        ) : (
-          <>
-            Use <bdi lang={suggestion}>{label}</bdi>
-          </>
-        )}
+        {labels.accept(name)}
       </button>{' '}
-      <button
-        aria-label={labels?.dismissAriaLabel ?? labels?.dismiss ?? 'Dismiss language suggestion'}
-        onClick={() => {
-          setSuggestion(null);
-          try {
-            sessionStorage.setItem('everylocale-suggestion-dismissed', '1');
-          } catch {}
-        }}
-      >
-        {labels?.dismiss ?? 'Dismiss'}
+      <button type="button" onClick={onDismiss}>
+        {labels.dismiss}
       </button>
     </aside>
   );

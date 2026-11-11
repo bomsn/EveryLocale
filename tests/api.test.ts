@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SqliteStore } from '../packages/store/src/index.js';
-import { createApp } from '../packages/server/src/app.js';
-import { projectSchema } from '../packages/core/src/index.js';
+import { SqliteStore } from '../packages/store/dist/index.js';
+import { createApp } from '../packages/server/dist/app.js';
+import { projectSchema } from '../packages/core/dist/index.js';
 
 const admin = 'test-owner-token-with-at-least-32-characters';
 const config = {

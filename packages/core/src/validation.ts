@@ -1,13 +1,23 @@
 import { parse, TYPE, type MessageFormatElement } from '@formatjs/icu-messageformat-parser';
-import * as OpenCC from 'opencc-js';
+import * as OpenCCModule from 'opencc-js';
 import type { Finding, SourceUnit, GlossaryEntry } from './types.js';
-const toTaiwan = OpenCC.Converter({ from: 'cn', to: 'tw' });
+import { localeTraits } from './locales.js';
+type Dictionary = string | readonly (readonly [string, string])[];
+type OpenCC = {
+  Converter(options: { from: string; to: string }): (text: string) => string;
+  Locale: { from: Readonly<Record<string, readonly (readonly Dictionary[])[] | undefined>> };
+};
+// opencc-js 1.4.2 publishes declarations with extensionless relative imports that NodeNext
+// resolution cannot follow, so the API this module uses is typed here once.
+const OpenCC = OpenCCModule as unknown as OpenCC;
+/** Regional Traditional Chinese conventions OpenCC can compare against. */
+const regionalConverters: Readonly<Record<string, (text: string) => string>> = {
+  TW: OpenCC.Converter({ from: 'cn', to: 'tw' }),
+  HK: OpenCC.Converter({ from: 'cn', to: 'hk' }),
+};
 /** Shared forms occur in legitimate Traditional words; only unequivocal simplified forms block. */
 function simplifiedOnlyCharacters() {
-  const dictionaries = (OpenCC.Locale.from.cn ?? []) as readonly (readonly (
-    | string
-    | readonly (readonly [string, string])[]
-  )[])[];
+  const dictionaries = OpenCC.Locale.from.cn ?? [];
   const entries = dictionaries.flatMap((group) =>
     group.flatMap((dictionary) =>
       typeof dictionary === 'string'
@@ -15,10 +25,10 @@ function simplifiedOnlyCharacters() {
         : [...dictionary],
     ),
   );
-  const traditional = new Set(entries.flatMap(([, target]) => [...target]));
+  const traditional = new Set(entries.flatMap(([, target]) => Array.from(target)));
   return new Set(
     entries
-      .filter(([source]) => [...source].length === 1 && !traditional.has(source))
+      .filter(([source]) => Array.from(source).length === 1 && !traditional.has(source))
       .map(([source]) => source),
   );
 }
@@ -88,7 +98,7 @@ export function validateTranslation(
       code: 'expansion',
       message: 'Unexpected translation size.',
     });
-  if (/\u0000/.test(translation))
+  if (translation.includes('\u0000'))
     findings.push({
       severity: 'critical',
       code: 'control',
@@ -150,22 +160,26 @@ export function validateTranslation(
       });
     }
   }
-  if (locale.startsWith('zh-Hant')) {
+  const traits = localeTraits(locale);
+  if (traits.language === 'zh' && traits.script === 'Hant') {
+    const regional = traits.region ? regionalConverters[traits.region] : undefined;
     let text = translation;
     for (const term of protectedTerms) text = text.split(term).join('');
-    const simplified = [...new Set([...text].filter((character) => simplifiedOnly.has(character)))];
+    const simplified = [
+      ...new Set(Array.from(text).filter((character) => simplifiedOnly.has(character))),
+    ];
     if (simplified.length)
       findings.push({
         severity: 'critical',
         code: 'chinese_script',
         message: `Simplified-only Chinese characters require correction: ${simplified.join('')}`,
       });
-    else if (toTaiwan(text) !== text)
+    else if (regional && regional(text) !== text)
       findings.push({
         severity: 'minor',
         code: 'chinese_variant',
         message:
-          'Chinese conversion suggests a script or regional variant. Confirm in context; valid Traditional Chinese wording can also differ from the conversion dictionary.',
+          'Chinese conversion suggests a regional variant. Confirm in context; valid Traditional Chinese wording can also differ from the conversion dictionary.',
       });
   }
   return findings;
