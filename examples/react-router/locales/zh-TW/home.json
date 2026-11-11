@@ -1,0 +1,6 @@
+{
+  "heading": "歡迎，{name}！",
+  "files": "{count, plural, other {# 個檔案}}",
+  "intro": "請閱讀<link>關於頁面</link>，了解本網站的翻譯方式。",
+  "overview": "檔案管理總覽"
+}

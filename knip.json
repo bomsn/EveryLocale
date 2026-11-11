@@ -2,11 +2,15 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      "entry": ["tools/*.ts", "tests/*.test.ts"],
+      "entry": ["tools/*.ts", "tests/*.test.ts", "tests/support/matrix.ts"],
       "project": ["tools/**/*.ts", "tests/**/*.ts"]
     },
     "packages/server": {
       "entry": ["src/app.ts", "public/*.js"]
+    },
+    "examples/react-router": {
+      "entry": ["type-checks.ts"],
+      "ignoreDependencies": ["react-router-v8"]
     }
   }
 }

@@ -28,8 +28,27 @@ const reportToConsole: MissingMessageHandler = (id, locale) => {
   console.error(`EveryLocale: message ${id} is missing for ${locale}`);
 };
 
+/**
+ * Declared rather than inferred so published declarations keep the generic signatures, which
+ * resolve against the app's generated message types instead of the untyped fallback.
+ */
+export type Formatter = {
+  readonly locale: string;
+  has: (id: string) => boolean;
+  /** Formats a message to text. */
+  format: <Id extends MessageId>(id: Id, ...values: ValuesArgument<Id>) => string;
+  /**
+   * Formats a message whose values may render rich-text tags or elements, returning the parts
+   * in order so a UI library can render them.
+   */
+  formatParts: <Id extends MessageId, Part = unknown>(
+    id: Id,
+    ...values: ValuesArgument<Id>
+  ) => Array<string | Part>;
+};
+
 /** One formatter per locale and message set; parsed formats are cached per id. */
-export function createFormatter(options: FormatterOptions) {
+export function createFormatter(options: FormatterOptions): Formatter {
   const { locale, messages } = options;
   const formats = new Map<string, IntlMessageFormat>();
   const reported = new Set<string>();
@@ -56,20 +75,12 @@ export function createFormatter(options: FormatterOptions) {
   return {
     locale,
     has: (id: string) => id in messages,
-    /** Formats a message to text. */
-    format<Id extends MessageId>(id: Id, ...[values]: ValuesArgument<Id>): string {
+    format(id, ...[values]) {
       const format = compiled(id);
       if (!format) return id;
       return String(format.format(values as Record<string, string | number | Date> | undefined));
     },
-    /**
-     * Formats a message whose values may render rich-text tags or elements, returning the parts
-     * in order so a UI library can render them.
-     */
-    formatParts<Id extends MessageId, Part>(
-      id: Id,
-      ...[values]: ValuesArgument<Id>
-    ): Array<string | Part> {
+    formatParts<Id extends MessageId, Part>(id: Id, ...[values]: ValuesArgument<Id>) {
       const format = compiled(id);
       if (!format) return [id];
       const result = format.format<Part>(values as Record<string, Part>);
@@ -77,4 +88,3 @@ export function createFormatter(options: FormatterOptions) {
     },
   };
 }
-export type Formatter = ReturnType<typeof createFormatter>;

@@ -3,7 +3,7 @@ import { gzipSync } from 'node:zlib';
 import { parserAlias } from '../packages/runtime/dist/bundler.js';
 
 /**
- * What each browser entry may add to an app, gzipped, with React itself external. A change that
+ * What each browser entry may add to an app, gzipped, with React and React Router external. A change that
  * pulls in a Node built-in, the ICU parser or the full flag set fails here.
  */
 const ENTRIES = [
@@ -28,6 +28,11 @@ const ENTRIES = [
     code: "import { resolveRequest, switchPage, PublishedRegistry } from './packages/adapters/dist/index.js'; console.log(resolveRequest, switchPage, PublishedRegistry);",
   },
   {
+    name: '@everylocale/react-router',
+    budget: 4_400,
+    code: "import { EveryLocaleRouterProvider, formatterOf, languageMeta, useLocalizedPath } from './packages/react-router/dist/index.js'; console.log(EveryLocaleRouterProvider, formatterOf, languageMeta, useLocalizedPath);",
+  },
+  {
     name: '@everylocale/react/flags/tw',
     budget: 1_200,
     code: "import tw from './packages/react/flags/tw.js'; console.log(tw);",
@@ -44,7 +49,7 @@ for (const entry of ENTRIES) {
     format: 'esm',
     platform: 'browser',
     alias: parserAlias(),
-    external: ['react', 'react-dom', 'react/jsx-runtime'],
+    external: ['react', 'react-dom', 'react/jsx-runtime', 'react-router'],
     define: { 'process.env.NODE_ENV': '"production"' },
     logLevel: 'silent',
   }).catch((error: unknown) => {

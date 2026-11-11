@@ -6,6 +6,7 @@ import {
   type MessageId,
   type MessageValues,
   type MissingMessageHandler,
+  type Tag,
   type TypedMessages,
 } from '@everylocale/runtime';
 
@@ -46,11 +47,19 @@ export function useMessages(): Formatter {
   return formatter;
 }
 
+/** Renders a rich-text tag in React; it receives the tag's formatted content. */
+export type TagRenderer = (chunks: ReactNode[]) => ReactNode;
+
+/** Generated types mark tags as `Tag`; in React they render nodes from nodes. */
+type ReactValues<Values> = {
+  [Key in keyof Values]: Values[Key] extends Tag ? TagRenderer : Values[Key];
+};
+
 type ValuesProp<Id extends MessageId> = TypedMessages extends false
   ? { values?: Record<string, unknown> }
   : [MessageValues<Id>] extends [undefined]
     ? { values?: undefined }
-    : { values: MessageValues<Id> };
+    : { values: ReactValues<MessageValues<Id>> };
 
 /**
  * Renders a message. Rich-text tags are rendered by functions in `values`, for example

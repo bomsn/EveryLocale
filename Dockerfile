@@ -9,14 +9,18 @@ COPY packages/runtime/package.json ./packages/runtime/package.json
 COPY packages/store/package.json ./packages/store/package.json
 COPY packages/server/package.json ./packages/server/package.json
 COPY packages/react/package.json ./packages/react/package.json
+COPY packages/react-router/package.json ./packages/react-router/package.json
 COPY packages/adapters/package.json ./packages/adapters/package.json
 COPY packages/cli/package.json ./packages/cli/package.json
 COPY examples/next/package.json ./examples/next/package.json
+COPY examples/react-router/package.json ./examples/react-router/package.json
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build && pnpm typecheck && pnpm test
 FROM build AS verify
-RUN pnpm lint && pnpm knip && pnpm format:check && pnpm release:pack && pnpm test:next
+# The browser suite runs on the host, where Chromium is installed; React 19 and React Router 8
+# run here through the matrix.
+RUN pnpm lint && pnpm knip && pnpm format:check && pnpm test:matrix && pnpm release:pack && pnpm test:next
 
 FROM build AS production-deps
 # Retain the dependency versions verified in the build stage.

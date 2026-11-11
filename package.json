@@ -9,17 +9,17 @@
     "node": ">=22.16.0"
   },
   "scripts": {
-    "build": "pnpm flags:bundle && pnpm --filter \"./packages/**\" -r build",
+    "build": "pnpm flags:bundle && pnpm --filter \"./packages/**\" -r build && pnpm --filter everylocale-react-router-example typegen",
     "typecheck": "pnpm --filter \"./packages/**\" -r typecheck && tsc -p tsconfig.json",
     "codegen": "tsx tools/config-schema.ts",
     "lint": "eslint .",
     "knip": "knip",
-    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\" tools tests packages/server/public examples/next/app eslint.config.js knip.json",
-    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" tools tests packages/server/public examples/next/app eslint.config.js knip.json",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\" tools tests packages/server/public examples/next/app examples/react-router/app examples/react-router/tests \"examples/react-router/*.ts\" eslint.config.js knip.json",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx}\" tools tests packages/server/public examples/next/app examples/react-router/app examples/react-router/tests \"examples/react-router/*.ts\" eslint.config.js knip.json",
     "audit:prod": "pnpm audit --prod --audit-level low",
     "size": "tsx tools/bundle-size.ts",
     "test": "tsx --test --test-concurrency=4 tests/*.test.ts",
-    "ci:host": "pnpm build && pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check && pnpm audit:prod && pnpm size && pnpm test && pnpm release:pack && pnpm test:next",
+    "ci:host": "pnpm build && pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check && pnpm audit:prod && pnpm size && pnpm test && pnpm test:matrix && pnpm release:pack && pnpm test:next && pnpm test:browser",
     "ci:local": "tsx tools/ci-local.ts",
     "test:wordpress": "tsx tools/wordpress-smoke.ts",
     "test:next": "tsx tools/next-smoke.ts",
@@ -33,7 +33,9 @@
     "setup": "tsx tools/setup.ts",
     "doctor": "tsx --env-file-if-exists=.env packages/server/src/doctor.ts",
     "changeset": "changeset",
-    "release:pack": "pnpm build && tsx tools/pack.ts"
+    "release:pack": "pnpm build && tsx tools/pack.ts",
+    "test:browser": "tsx tools/browser-test.ts",
+    "test:matrix": "tsx tools/react-matrix.ts"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",
@@ -50,6 +52,7 @@
     "prettier": "3.8.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "react-router": "7.18.5",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.2"

@@ -1,0 +1,53 @@
+{
+  "name": "@everylocale/react-router",
+  "version": "0.2.0",
+  "description": "React Router framework-mode integration: server-resolved locales and per-route precompiled messages.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@everylocale/adapters": "workspace:*",
+    "@everylocale/core": "workspace:*",
+    "@everylocale/react": "workspace:*",
+    "@everylocale/runtime": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18.3 <20",
+    "react-router": ">=7.18 <9",
+    "vite": ">=6"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.28",
+    "react": "18.3.1",
+    "react-router": "7.18.5",
+    "vite": "8.3.7",
+    "react-dom": "18.3.1",
+    "@types/react-dom": "18.3.7"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}

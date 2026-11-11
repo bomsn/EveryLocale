@@ -1,0 +1,6 @@
+{
+  "heading": "¡Hola, {name}!",
+  "files": "{count, plural, one {# archivo} many {# de archivos} other {# archivos}}",
+  "intro": "Lee la <link>página de información</link> para saber cómo se traduce este sitio.",
+  "overview": "Resumen de la gestión de archivos"
+}

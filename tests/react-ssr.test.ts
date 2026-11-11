@@ -131,8 +131,9 @@ test('the language select changes language only on submit and works as a plain f
       hidden: { return: '/de/about' },
     }),
   );
+  // React 18 and 19 order form attributes differently.
+  assert.match(markup, /<form (?=[^>]*method="get")(?=[^>]*action="\/language")[^>]*>/);
   for (const fragment of [
-    '<form method="get" action="/language">',
     '<option value="de" lang="de" selected="">Deutsch</option>',
     '<input type="hidden" name="return" value="/de/about"/>',
     '<button type="submit">Wechseln</button>',

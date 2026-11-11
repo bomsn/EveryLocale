@@ -1,0 +1,6 @@
+{
+  "heading": "Welcome, {name}!",
+  "files": "{count, plural, one {# file} other {# files}}",
+  "intro": "Read the <link>about page</link> to learn how this site is translated.",
+  "overview": "File management overview"
+}

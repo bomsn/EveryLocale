@@ -9,6 +9,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/.next/**',
+      '**/.react-router/**',
       '**/build/**',
       'artifacts/**',
       'data/**',
@@ -55,7 +56,21 @@ export default tseslint.config(
     },
   },
   {
-    files: ['packages/react/src/**/*.tsx', 'examples/**/*.tsx'],
+    files: ['packages/react-router/src/**/*.ts', 'examples/react-router/app/**/*.{ts,tsx}'],
+    rules: {
+      // React Router turns a Response thrown from a loader into the HTTP response.
+      '@typescript-eslint/only-throw-error': [
+        'error',
+        { allow: [{ from: 'lib', name: 'Response' }] },
+      ],
+    },
+  },
+  {
+    files: [
+      'packages/react/src/**/*.tsx',
+      'packages/react-router/src/**/*.tsx',
+      'examples/**/*.tsx',
+    ],
     plugins: { 'react-hooks': reactHooks, 'jsx-a11y': jsxA11y },
     rules: { ...reactHooks.configs.recommended.rules, ...jsxA11y.flatConfigs.strict.rules },
   },

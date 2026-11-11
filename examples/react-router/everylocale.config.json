@@ -1,0 +1,9 @@
+{
+  "$schema": "../../packages/core/schema/config-1.json",
+  "version": 1,
+  "project": "react-router-example",
+  "sourceLocale": "en",
+  "locales": [{ "id": "es" }, { "id": "fr-CA" }, { "id": "zh-TW" }, { "id": "ar" }, { "id": "de" }],
+  "files": [{ "pattern": "locales/{locale}/{namespace}.json", "format": "json" }],
+  "codegen": { "output": "app/everylocale.generated.d.ts" }
+}
