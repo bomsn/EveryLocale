@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import '@everylocale/react/fonts.css';
 import { resolveRequest } from '@everylocale/adapters';
-import { locales } from '../locales';
+import { localization, ORIGIN } from '../i18n';
+
 export default async function Layout({
   children,
   params,
@@ -10,9 +11,8 @@ export default async function Layout({
   params: Promise<{ segments?: string[] }>;
 }) {
   const { segments = [] } = await params;
-  const locale = resolveRequest(new Request('https://example.test/' + segments.join('/')), {
-    locales,
-  });
+  const { locales } = await localization;
+  const locale = resolveRequest(new Request(`${ORIGIN}/${segments.join('/')}`), { locales });
   return (
     <html lang={locale.locale} dir={locale.direction}>
       <body>{children}</body>

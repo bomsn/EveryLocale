@@ -13,9 +13,9 @@ import {
   type RouteObject,
 } from 'react-router';
 import { parseAppConfig } from '../packages/core/dist/config.js';
-import { ReleaseError } from '../packages/runtime/dist/server.js';
+import { loadLocalization, ReleaseError } from '../packages/runtime/dist/server.js';
 import { Message, useMessages } from '../packages/react/dist/index.js';
-import { createI18n, I18nConfigError } from '../packages/react-router/dist/server.js';
+import { createI18n, LocalizationConfigError } from '../packages/react-router/dist/server.js';
 import {
   EveryLocaleRouterProvider,
   formatterOf,
@@ -62,7 +62,10 @@ const thrown = (run: () => unknown) => {
 };
 
 test('startup refuses a missing config, a missing release, an uncovered locale and a bad origin', async () => {
-  await assert.rejects(createI18n({ config: join(app, 'none.json'), origin }), I18nConfigError);
+  await assert.rejects(
+    createI18n({ config: join(app, 'none.json'), origin }),
+    LocalizationConfigError,
+  );
   const empty = await mkdtemp(join(tmpdir(), 'everylocale-empty-'));
   try {
     await writeFile(join(empty, 'everylocale.config.json'), JSON.stringify(config));
@@ -83,6 +86,20 @@ test('startup refuses a missing config, a missing release, an uncovered locale a
   );
   await assert.rejects(createI18n({ config: other, origin }), /source locale en/);
   await assert.rejects(createI18n({ config: configPath, origin: 'ftp://files.example' }), /origin/);
+});
+
+test('any server framework loads the same verified release and serves only its locales', async () => {
+  const localization = await loadLocalization({ config: configPath });
+  assert.equal(localization.sourceLocale, 'en');
+  assert.deepEqual(
+    localization.registry.map((item) => item.id),
+    ['en', 'es', 'fr-CA', 'zh-TW', 'ar', 'de', 'fr'],
+  );
+  assert.ok(!localization.locales.some((item) => item.id === 'fr'), 'drafts are opt-in');
+  assert.ok(localization.messages('de', ['about'])['about:heading']);
+  assert.throws(() => localization.messages('fr', ['about']), LocalizationConfigError);
+  const previews = await loadLocalization({ config: configPath, drafts: true });
+  assert.ok(previews.messages('fr', ['about'])['about:heading']);
 });
 
 test('the URL decides the locale on public pages, and unknown or unserved prefixes are 404', async () => {

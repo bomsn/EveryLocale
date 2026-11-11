@@ -1,47 +1,45 @@
 import { notFound } from 'next/navigation';
 import { nextMetadata, resolveRequest } from '@everylocale/adapters';
-import { compileMessage } from '@everylocale/core';
-import { EveryLocaleProvider, Message, LanguageLinks, LocaleFlag } from '@everylocale/react';
+import { createFormatter, localizePath } from '@everylocale/runtime';
+import { EveryLocaleProvider, LanguageLinks, LocaleFlag, Message } from '@everylocale/react';
 import tw from '@everylocale/react/flags/tw';
-import { locales } from '../locales';
+import { localization, ORIGIN } from '../i18n';
+
 export const dynamic = 'force-dynamic';
-const pages: Partial<Record<string, { path: string; message: string; title: string }>> = {
-  en: { path: '/about', message: 'Hello {name}', title: 'About' },
-  ar: { path: '/ar/about', message: 'مرحبًا {name}', title: 'حول التطبيق' },
-  'zh-Hant-TW': { path: '/zh-tw/about', message: '你好 {name}', title: '關於' },
-  de: { path: '/de/about', message: 'Hallo {name}', title: 'Über uns' },
-};
+
+/**
+ * The one page, `/about`, in every served locale. Anything else, including the prefix of a
+ * draft or unknown locale, is a 404 rather than English under a foreign URL.
+ */
 async function pageData(params: Promise<{ segments?: string[] }>) {
   const { segments = [] } = await params;
   const path = '/' + segments.join('/');
-  const selected = resolveRequest(new Request('https://example.test' + path), { locales });
-  const page = pages[selected.locale];
-  if (!page || page.path !== path) notFound();
-  return { selected, page };
+  const l10n = await localization;
+  const selected = resolveRequest(new Request(ORIGIN + path), { locales: l10n.locales });
+  const paths = Object.fromEntries(
+    l10n.locales.map((item) => [item.id, localizePath('/about', item.id, l10n.locales)]),
+  );
+  if (paths[selected.locale] !== path) notFound();
+  const messages = l10n.messages(selected.locale, ['about']);
+  const { format } = createFormatter({ locale: selected.locale, messages });
+  return { l10n, selected, paths, messages, format };
 }
+
 export async function generateMetadata({ params }: { params: Promise<{ segments?: string[] }> }) {
-  const { selected, page } = await pageData(params);
+  const { l10n, selected, paths, format } = await pageData(params);
   return {
-    title: page.title,
-    ...nextMetadata(
-      'https://example.test',
-      Object.fromEntries(
-        Object.entries(pages).flatMap(([locale, item]) => (item ? [[locale, item.path]] : [])),
-      ),
-      selected.locale,
-      'en',
-    ),
+    title: format('about:title'),
+    ...nextMetadata(ORIGIN, paths, selected.locale, l10n.sourceLocale),
   };
 }
+
 export default async function Page({ params }: { params: Promise<{ segments?: string[] }> }) {
-  const { selected, page } = await pageData(params);
+  const { l10n, selected, paths, messages, format } = await pageData(params);
   return (
-    <main lang={selected.locale} dir={selected.direction}>
-      <h1>{page.title}</h1>
-      <EveryLocaleProvider
-        locale={selected.locale}
-        messages={{ 'about:greeting': compileMessage('icu', page.message) }}
-      >
+    <main>
+      <h1>{format('about:title')}</h1>
+      {/* The client provider receives exactly the messages this page rendered with. */}
+      <EveryLocaleProvider locale={selected.locale} messages={messages}>
         <p>
           <Message id="about:greeting" values={{ name: 'Ali' }} />
         </p>
@@ -49,11 +47,9 @@ export default async function Page({ params }: { params: Promise<{ segments?: st
       </EveryLocaleProvider>
       <LanguageLinks
         locale={selected.locale}
-        locales={locales}
-        label="Language"
-        links={Object.fromEntries(
-          Object.entries(pages).flatMap(([locale, item]) => (item ? [[locale, item.path]] : [])),
-        )}
+        locales={l10n.locales}
+        label={format('about:languages')}
+        links={paths}
       />
     </main>
   );

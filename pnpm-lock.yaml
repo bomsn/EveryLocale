@@ -68,9 +68,6 @@ importers:
       '@everylocale/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
-      '@everylocale/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@everylocale/react':
         specifier: workspace:*
         version: link:../../packages/react

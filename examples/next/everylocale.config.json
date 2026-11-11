@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "project": "next-example",
+  "sourceLocale": "en",
+  "locales": [
+    { "id": "ar" },
+    { "id": "zh-Hant-TW", "prefix": "zh-tw" },
+    { "id": "de" },
+    { "id": "fr", "status": "draft" }
+  ],
+  "files": [{ "pattern": "locales/{locale}/{namespace}.json", "format": "json" }]
+}

@@ -1,33 +1,27 @@
-import { readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
 import { resolveRequest } from '@everylocale/adapters';
-import { CONFIG_FILE, parseAppConfig } from '@everylocale/core/config';
 import {
   localeCookie,
   localeFromPath,
   localizePath,
   type LocaleDefinition,
 } from '@everylocale/core/locales';
-import { loadRelease, type FallbackReport, type Release } from '@everylocale/runtime/server';
+import {
+  loadLocalization,
+  LocalizationConfigError,
+  type LocalizationOptions,
+  type Release,
+} from '@everylocale/runtime/server';
 import type { CompiledMessages } from '@everylocale/runtime';
 import type { LocaleData } from './shared.js';
 
 export type { LocaleData } from './shared.js';
 
-export type I18nOptions = {
-  /** Path of `everylocale.config.json`. Defaults to the one in the working directory. */
-  config?: string;
+/** Config, drafts and fallback reporting as for `loadLocalization`; unserved locales answer 404. */
+export type I18nOptions = LocalizationOptions & {
   /** Public origin for canonical and alternate URLs, such as `https://example.com`. */
   origin: string;
-  /**
-   * Serve draft locales as well, for preview deployments. Without it a draft locale's URLs
-   * answer 404, so incomplete translations never reach the public site.
-   */
-  drafts?: boolean;
   /** Route param that holds the locale prefix, as in `:locale?/about`. Defaults to `locale`. */
   param?: string;
-  /** Called once per draft locale with the message ids that fall back to source text. */
-  onFallback?: FallbackReport;
 };
 
 /** The parts of React Router's loader arguments the adapter reads. */
@@ -64,47 +58,22 @@ export type I18n = {
   switchLocale(args: LoaderArgsLike): Response;
 };
 
-export class I18nConfigError extends Error {}
+export { LocalizationConfigError } from '@everylocale/runtime/server';
 
 const notFound = () => new Response('Not Found', { status: 404, statusText: 'Not Found' });
 
 /**
- * Reads the app config and the verified release once per process. Startup fails when the
- * release is missing, altered, or does not cover every locale the config lists.
+ * Reads the app config and the verified release once per process; see `loadLocalization` for
+ * what fails at startup.
  */
 export async function createI18n(options: I18nOptions): Promise<I18n> {
-  const configPath = resolve(options.config ?? CONFIG_FILE);
-  let text: string;
-  try {
-    text = await readFile(configPath, 'utf8');
-  } catch {
-    throw new I18nConfigError(`No ${CONFIG_FILE} found at ${configPath}`);
-  }
-  const config = parseAppConfig(JSON.parse(text));
-  const release = await loadRelease(resolve(dirname(configPath), config.release.directory), {
-    onFallback: options.onFallback,
-  });
-  if (release.manifest.sourceLocale !== config.sourceLocale)
-    throw new I18nConfigError(
-      `The release is for source locale ${release.manifest.sourceLocale}, the config says ${config.sourceLocale}`,
-    );
-  const released = new Map(release.manifest.locales.map((item) => [item.id, item.status]));
-  const missing = config.registry.slice(1).filter((item) => !released.has(item.id));
-  if (missing.length)
-    throw new I18nConfigError(
-      `The release has no ${missing.map((item) => item.id).join(', ')}; run everylocale pull`,
-    );
+  const localization = await loadLocalization(options);
   const origin = new URL(options.origin);
   if (!['http:', 'https:'].includes(origin.protocol) || origin.pathname !== '/' || origin.search)
-    throw new I18nConfigError(
+    throw new LocalizationConfigError(
       'origin must be an http or https origin, such as https://example.com',
     );
-  const registry = config.registry;
-  // A locale the release still marks as draft is served only when drafts are enabled, even if
-  // the config was switched to live and nobody pulled since.
-  const locales = registry.filter(
-    (item, index) => index === 0 || options.drafts || released.get(item.id) === 'live',
-  );
+  const { registry, locales, release, sourceLocale } = localization;
   const served = new Set(locales.map((item) => item.id));
   const param = options.param ?? 'locale';
 
@@ -136,7 +105,7 @@ export async function createI18n(options: I18nOptions): Promise<I18n> {
   };
 
   return {
-    sourceLocale: config.sourceLocale,
+    sourceLocale,
     locales,
     release,
     root(args, namespaces = [], surface) {
@@ -145,15 +114,15 @@ export async function createI18n(options: I18nOptions): Promise<I18n> {
         locale: resolved.locale,
         direction: resolved.direction,
         revision: release.revision,
-        sourceLocale: config.sourceLocale,
+        sourceLocale,
         locales,
         origin: origin.origin,
         pathname: resolved.pathname,
-        messages: release.messages(resolved.locale, namespaces),
+        messages: localization.messages(resolved.locale, namespaces),
       };
     },
     messages(args, namespaces, surface) {
-      return release.messages(resolveArgs(args, surface).locale, namespaces);
+      return localization.messages(resolveArgs(args, surface).locale, namespaces);
     },
     requirePublished(args, published, surface) {
       if (!published.includes(resolveArgs(args, surface).locale)) throw notFound();

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, cp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
+import { parseAppConfig } from '../packages/core/dist/config.js';
+import { releaseFromFiles, withLocalService } from './local-service.js';
 import { pnpmPath, releaseVersion, runPnpm } from './process.js';
 
 const pnpm = pnpmPath();
@@ -16,6 +18,12 @@ try {
   await cp(join(fixture, 'app'), join(directory, 'app'), { recursive: true });
   await cp(join(fixture, 'next.config.mjs'), join(directory, 'next.config.mjs'));
   await cp(join(fixture, 'tsconfig.json'), join(directory, 'tsconfig.json'));
+  await cp(join(fixture, 'locales'), join(directory, 'locales'), { recursive: true });
+  const configText = await readFile(join(fixture, 'everylocale.config.json'), 'utf8');
+  await writeFile(join(directory, 'everylocale.config.json'), configText);
+  // The consumer app gets its release the way any app does: sync, import, pull.
+  const config = parseAppConfig(JSON.parse(configText));
+  await withLocalService(config, (service) => releaseFromFiles(service, directory, config));
   const manifest = JSON.parse(await readFile(join(fixture, 'package.json'), 'utf8')) as {
     dependencies: Record<string, string>;
     pnpm?: unknown;
@@ -70,6 +78,8 @@ try {
   assert.match(ar, /مرحبًا Ali/);
   assert.match(zh, /你好 Ali/);
   assert.match(de, /Hallo Ali/);
+  assert.match(ar, /<title>حول التطبيق<\/title>/);
+  assert.match(de, /<nav aria-label="Sprachen">/);
   assert.match(zh, /<svg/);
   assert.match(ar, /rel="canonical" href="https:\/\/example.test\/ar\/about"/);
   assert.match(ar, /hrefLang="zh-Hant-TW"/i);
@@ -109,7 +119,7 @@ try {
   assert.match(await unavailable.text(), /Read the original page/);
   assert.equal((await fetch('http://localhost:4315/zh-cn/about')).status, 404);
   console.log(
-    'Next.js 16 production build, React 19 runtime, server rendering, metadata, concurrent catalog isolation, and unpublished-route checks passed.',
+    'Next.js 16 production build from a verified release, React 19 runtime, server rendering, metadata, concurrent catalog isolation, and unpublished-route checks passed.',
   );
 } finally {
   const pid = child?.pid;
