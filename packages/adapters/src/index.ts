@@ -5,21 +5,21 @@ import {
   resolveLocale,
   readLocaleCookie,
   type LocaleDefinition,
-  DEFAULT_LOCALES,
 } from '@everylocale/core/locales';
 import type { ApprovedCatalog } from '@everylocale/core/types';
-import { serviceUrl } from '@everylocale/core';
+import { serviceUrl } from '@everylocale/core/service-url';
 export { PublishedRegistry, type PublishedPage, type PublishedVariant } from './published.js';
 
 export type AdapterOptions = {
-  locales?: readonly LocaleDefinition[];
+  /** The registry from `defineLocales` or the app config; the first entry is the source locale. */
+  locales: readonly LocaleDefinition[];
   profileLocale?: string | null;
   privateSurface?: boolean;
 };
 /** Accepts any Fetch API Request, as server frameworks pass to loaders and route handlers. */
-export function resolveRequest(request: Request, options: AdapterOptions = {}) {
+export function resolveRequest(request: Request, options: AdapterOptions) {
   const url = new URL(request.url);
-  const locales = options.locales ?? DEFAULT_LOCALES;
+  const { locales } = options;
   const locale = resolveLocale({
     pathname: url.pathname,
     privateSurface: options.privateSurface ?? false,
@@ -35,23 +35,32 @@ export function resolveRequest(request: Request, options: AdapterOptions = {}) {
     pathname: localeFromPath(url.pathname, locales).pathname,
   };
 }
-export function nextMetadata(origin: string, paths: Record<string, string>, locale: string) {
+export function nextMetadata(
+  origin: string,
+  paths: Readonly<Record<string, string>>,
+  locale: string,
+  sourceLocale: string,
+) {
   const path = paths[locale];
   if (!path) throw new Error('Requested page translation is unpublished');
   return {
     alternates: {
       canonical: new URL(path, origin).href,
-      languages: Object.fromEntries(alternates(origin, paths).map((x) => [x.hreflang, x.href])),
+      languages: Object.fromEntries(
+        alternates(origin, paths, sourceLocale).map((x) => [x.hreflang, x.href]),
+      ),
     },
   };
 }
+/** The published counterpart when paths are known, otherwise the same path under the locale's prefix. */
 export function switchPage(
   path: string,
   locale: string,
-  availablePaths?: Record<string, string>,
+  locales: readonly LocaleDefinition[],
+  availablePaths?: Readonly<Record<string, string>>,
 ): string | null {
   if (availablePaths) return availablePaths[locale] ?? null;
-  return localizePath(path, locale);
+  return localizePath(path, locale, locales);
 }
 export class EveryLocaleClient {
   constructor(

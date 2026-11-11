@@ -25,3 +25,4 @@ CLAUDE.md
 tools/import-benchmark.ts
 packages/server/public/guides/
 packages/server/public/flags/
+packages/react/flags/

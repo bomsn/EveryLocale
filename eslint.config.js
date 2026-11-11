@@ -14,7 +14,7 @@ export default tseslint.config(
       'data/**',
       'test-results/**',
       'docs/**',
-      'packages/react/src/flags.ts',
+      'packages/react/flags/**',
       'tools/import-benchmark.ts',
       // Plain browser JavaScript has no type information for these rules; the workspace
       // script is linted once it is TypeScript.

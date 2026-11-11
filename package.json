@@ -9,8 +9,9 @@
     "node": ">=22.16.0"
   },
   "scripts": {
-    "build": "pnpm flags:bundle && pnpm -r build",
-    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
+    "build": "pnpm flags:bundle && pnpm --filter \"./packages/**\" -r build",
+    "typecheck": "pnpm --filter \"./packages/**\" -r typecheck && tsc -p tsconfig.json",
+    "codegen": "tsx tools/config-schema.ts",
     "lint": "eslint .",
     "knip": "knip",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\" tools tests packages/server/public examples/next/app eslint.config.js knip.json",

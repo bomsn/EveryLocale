@@ -38,6 +38,8 @@ export const projectSchema = z.object({
     )
     .default([]),
   instructions: z.record(z.string(), z.string().max(4000)).default({}),
+  /** Language AI review findings are written in, for the people who read them. */
+  reviewerLanguage: z.string().min(2).max(40).default('en'),
 });
 export type Project = z.infer<typeof projectSchema>;
 export type JobStatus = 'pending' | 'running' | 'review' | 'failed' | 'stale' | 'approved';

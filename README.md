@@ -35,7 +35,7 @@ Add your model settings to the generated `.env`, run `pnpm doctor` to check the 
 - Your release process: CLI commands for GitHub Actions or another CI runner, plus a server-side HTTP API.
 - Your interface: React controls and request helpers for server-rendered React and Next.js, with right-to-left direction, native language names, and multilingual SEO helpers.
 
-English, Arabic, Taiwan Chinese, German, Spanish, and French are included in the default locale registry. You can configure additional target languages. Your app still needs to render translated messages and provide localized routes; the [connection guide](docs/CONNECT.md) shows where that work belongs.
+Choose any target languages by their standard locale ids, such as `es`, `fr-CA` or `zh-TW`. Native names, text direction and plural rules come from the Unicode CLDR data built into Node.js and browsers. Your app still needs to render translated messages and provide localized routes; the [connection guide](docs/CONNECT.md) shows where that work belongs.
 
 ## When a translation needs attention
 

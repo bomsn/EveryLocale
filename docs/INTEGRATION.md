@@ -15,11 +15,13 @@ The following sections explain the helpers and the host application's responsibi
 
 ## React
 
+Build the locale registry once with `defineLocales(sourceLocale, targets)` from `@everylocale/core/locales`, and pass the same registry to every helper and control. Each target is a BCP 47 id or an object with `status`, `label`, `prefix` and `direction`; labels default to the language's own name and direction to its script. URL prefixes default to the lower-cased id, and the source locale is unprefixed.
+
 Mount `EveryLocaleProvider` with the catalog chosen on the server for that request. Serialize that exact catalog into the hydration data; avoid a second browser-side language decision. Use `Message` or `useEveryLocale` for explicit ICU declarations.
 
-`LanguageSelector` receives `locale`, `onChange`, and optional trusted `country`. The callback saves an explicit account/cookie preference and navigates to a published counterpart. `LanguageSuggestion` reads browser preferences after hydration and offers a dismissible suggestion. The host passes `dismissed`, `onAccept` and `onDismiss`, and decides where a dismissal is remembered. `LocaleFlag` embeds SVG assets. For Arabic, set direction on the HTML document and use logical CSS properties in layouts. Use `isolateIdentifier` or `<bdi dir="auto">` around mixed-direction identifiers. Use fonts with Arabic and CJK coverage in browser screens, PDF generation, emails, and exports.
+`LanguageLinks` renders a navigation landmark with a link to each published counterpart of the page, marked with `hreflang` and `lang`; it works without JavaScript. `LanguageSelect` is a labelled select inside a GET form with an explicit submit button, so browsing options never navigates away; your server handles the submitted locale, saves the explicit preference, and redirects. Pass `onSelect` to handle the choice in the browser instead. `LanguageSuggestion` reads browser preferences after hydration and offers a dismissible suggestion. The host passes `dismissed`, `onAccept` and `onDismiss`, and decides where a dismissal is remembered. `LocaleFlag` shows a flag only for flags you import, such as `import tw from '@everylocale/react/flags/tw'`, so a page bundles only those flags. It uses the locale's region, then a trusted visitor `country`, then the language's likely region. Flags stand for countries, not languages; prefer language names alone where a country could be misread. For right-to-left languages, set direction on the HTML document and use logical CSS properties in layouts. Use `isolateIdentifier` or `<bdi dir="auto">` around mixed-direction identifiers. Use fonts with Arabic and CJK coverage in browser screens, PDF generation, emails, and exports.
 
-Localize control copy through the same approved catalog as the application. `LanguageSelector` accepts `label` and `errorMessage`. `LanguageSuggestion` requires `labels` with `region` (the accessible name), `dismiss`, and two renderers, `prompt(language)` and `accept(language)`. The renderers can use rich ICU messages; the language-name argument already carries language and direction isolation.
+Localize control copy through the same approved catalog as the application; the controls have no built-in English text. `LanguageLinks` takes `label`, `LanguageSelect` takes `label` and `submitLabel`, and `LanguageSuggestion` requires `labels` with `region` (the accessible name), `dismiss`, and two renderers, `prompt(language)` and `accept(language)`. The renderers can use rich ICU messages; the language-name argument already carries language and direction isolation.
 
 ## Arabic and Taiwan Chinese fonts
 
@@ -29,7 +31,7 @@ For browser-generated PDF reports, load the selected fonts and await `document.f
 
 ## Server-rendered React
 
-A server loader or route handler resolves `resolveRequest(request, {profileLocale,privateSurface})` with the Fetch API `Request` your framework provides. Public pages select the catalog by URL; authenticated private surfaces use account preference, then explicit cookie, then English. Set `<html lang={locale} dir={direction}>` in the root. Build canonical and alternate links from `registry.metadata(pageId, locale)` and combine them with localized title, description and structured data from the same published registry.
+A server loader or route handler resolves `resolveRequest(request, {locales, profileLocale, privateSurface})` with the Fetch API `Request` your framework provides. Public pages select the catalog by URL; authenticated private surfaces use account preference, then explicit cookie, then English. Set `<html lang={locale} dir={direction}>` in the root. Build canonical and alternate links from `registry.metadata(pageId, locale)` and combine them with localized title, description and structured data from the same published registry.
 
 An optional language segment in the route keeps existing English URLs stable. Validate recognized prefixes and published page availability before rendering. Throw a 404 response for unknown locales or missing translations. The unavailable screen can offer the original-language link. Do not put English content under `/ar` or `/zh-tw` as fallback.
 
@@ -61,6 +63,6 @@ The WordPress plugin automates linked drafts, approved publishing, source change
 
 ## Extension points
 
-Add locale definitions in one host registry: identifier, native label, direction, URL prefix, and decoration. Project target languages use standard Intl locale identifiers; parsers and job contracts do not contain language-specific branches except script/plural checks. New OpenAI-compatible providers require endpoint/model/prices configuration. A non-compatible vendor needs a transport adapter implementing the same model-call and reservation contract.
+Locales come from one host registry built with `defineLocales`. Project target languages use standard BCP 47 identifiers; parsers and job contracts contain no language-specific branches except script and plural checks derived from CLDR data. Document formats implement `DocumentFormat` and are added with `registerFormat`. New OpenAI-compatible providers require endpoint/model/prices configuration. A non-compatible vendor needs a transport adapter implementing the same model-call and reservation contract.
 
 `TranslationStore` defines the engine storage interface; `LocalizationStore` adds project, review, document, and token management for the service and worker. Storage implementations must preserve transactional approval, lease, idempotency, and budget invariants.

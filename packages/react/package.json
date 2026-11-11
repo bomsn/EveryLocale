@@ -5,12 +5,17 @@
   "license": "MIT",
   "files": [
     "dist",
-    "assets"
+    "assets",
+    "flags"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./flags/*": {
+      "types": "./flags/*.d.ts",
+      "import": "./flags/*.js"
     },
     "./fonts.css": "./assets/fonts.css",
     "./fonts/*": "./assets/fonts/*"
@@ -30,5 +35,8 @@
   "devDependencies": {
     "@types/react": "18.3.28",
     "react": "18.3.1"
-  }
+  },
+  "sideEffects": [
+    "./assets/*.css"
+  ]
 }

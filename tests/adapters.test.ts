@@ -6,24 +6,33 @@ import {
   switchPage,
   PublishedRegistry,
 } from '../packages/adapters/dist/index.js';
+import { defineLocales } from '../packages/core/dist/index.js';
+
+const locales = defineLocales('en', [
+  'ar',
+  { id: 'zh-Hant-TW', prefix: 'zh-tw' },
+  'de',
+  'es',
+  'fr',
+]);
 
 test('request resolution and Next.js metadata agree on URL ownership and published alternates', () => {
   const request = new Request('https://example.test/de/pricing', {
     headers: { cookie: 'el_locale=fr' },
   });
-  assert.deepEqual(resolveRequest(request, { profileLocale: 'en' }), {
+  assert.deepEqual(resolveRequest(request, { profileLocale: 'en', locales }), {
     locale: 'de',
     direction: 'ltr',
     pathname: '/pricing',
   });
   const paths = { en: '/pricing', de: '/de/pricing' };
-  const next = nextMetadata('https://example.test', paths, 'de');
+  const next = nextMetadata('https://example.test', paths, 'de', 'en');
   assert.equal(next.alternates.canonical, 'https://example.test/de/pricing');
   assert.equal(next.alternates.languages['x-default'], 'https://example.test/pricing');
-  assert.throws(() => nextMetadata('https://example.test', paths, 'fr'));
-  assert.equal(switchPage('/blog/source', 'fr', paths), null);
+  assert.throws(() => nextMetadata('https://example.test', paths, 'fr', 'en'));
+  assert.equal(switchPage('/blog/source', 'fr', locales, paths), null);
   const simultaneous = ['ar', 'de', 'fr', 'zh-tw'].map((prefix) =>
-    resolveRequest(new Request(`https://example.test/${prefix}/pricing`)),
+    resolveRequest(new Request(`https://example.test/${prefix}/pricing`), { locales }),
   );
   assert.deepEqual(
     simultaneous.map((x) => x.locale),
@@ -46,7 +55,7 @@ test('one immutable published snapshot owns strict routes, metadata, structured 
       ],
     },
   ];
-  const registry = new PublishedRegistry('https://example.test', pages);
+  const registry = new PublishedRegistry('https://example.test', pages, locales);
   pages[0]!.variants[1]!.path = '/de/changed';
   assert.equal(registry.resolve('/de/blog/artikel')?.variant.title, 'Artikel');
   assert.equal(registry.resolve('/fr/blog/article'), null);
@@ -74,33 +83,45 @@ test('one immutable published snapshot owns strict routes, metadata, structured 
   assert.doesNotMatch(sitemap, /hreflang="fr"/);
   assert.throws(
     () =>
-      new PublishedRegistry('https://example.test', [
-        {
-          id: 'x',
-          variants: [
-            { locale: 'en', path: '//evil.test/article', title: 'Title', approvalRevision: '1' },
-          ],
-        },
-      ]),
+      new PublishedRegistry(
+        'https://example.test',
+        [
+          {
+            id: 'x',
+            variants: [
+              { locale: 'en', path: '//evil.test/article', title: 'Title', approvalRevision: '1' },
+            ],
+          },
+        ],
+        locales,
+      ),
   );
   assert.throws(
     () =>
-      new PublishedRegistry('https://example.test', [
-        {
-          id: 'x',
-          variants: [{ locale: 'de', path: '/article', title: 'Title', approvalRevision: '1' }],
-        },
-      ]),
+      new PublishedRegistry(
+        'https://example.test',
+        [
+          {
+            id: 'x',
+            variants: [{ locale: 'de', path: '/article', title: 'Title', approvalRevision: '1' }],
+          },
+        ],
+        locales,
+      ),
   );
-  const arabic = new PublishedRegistry('https://example.test', [
-    {
-      id: 'arabic',
-      variants: [
-        { locale: 'en', path: '/report', title: 'Report', approvalRevision: '1' },
-        { locale: 'ar', path: '/ar/تقارير', title: 'تقارير', approvalRevision: '2' },
-      ],
-    },
-  ]);
+  const arabic = new PublishedRegistry(
+    'https://example.test',
+    [
+      {
+        id: 'arabic',
+        variants: [
+          { locale: 'en', path: '/report', title: 'Report', approvalRevision: '1' },
+          { locale: 'ar', path: '/ar/تقارير', title: 'تقارير', approvalRevision: '2' },
+        ],
+      },
+    ],
+    locales,
+  );
   assert.equal(arabic.resolve('/ar/تقارير')?.variant.locale, 'ar');
   assert.equal(
     arabic.metadata('arabic', 'ar').canonical,

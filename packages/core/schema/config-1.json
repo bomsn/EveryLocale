@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "project": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$",
+      "description": "Project id on the EveryLocale service."
+    },
+    "sourceLocale": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 40,
+      "description": "The language the source files are written in."
+    },
+    "locales": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 40
+          },
+          "status": {
+            "default": "live",
+            "description": "Live locales must be complete; draft locales may be incomplete.",
+            "type": "string",
+            "enum": [
+              "live",
+              "draft"
+            ]
+          },
+          "label": {
+            "description": "Defaults to the CLDR native name.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "prefix": {
+            "description": "URL segment. Defaults to the lower-cased id; the source locale has none.",
+            "type": "string",
+            "maxLength": 40
+          },
+          "direction": {
+            "description": "Defaults to the script direction.",
+            "type": "string",
+            "enum": [
+              "ltr",
+              "rtl"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Target locales, in display order."
+    },
+    "files": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Path relative to the config file. {locale} is required; {namespace} matches one or more path segments."
+          },
+          "format": {
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Namespace for a pattern without {namespace}, or a prefix for one with it.",
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_.-]*(?:\\/[a-z0-9][a-z0-9_.-]*)*$"
+          },
+          "frontMatter": {
+            "description": "Markdown and MDX front matter keys to translate. Defaults to title and description.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "pattern",
+          "format"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "release": {
+      "default": {
+        "directory": ".everylocale"
+      },
+      "type": "object",
+      "properties": {
+        "directory": {
+          "default": ".everylocale",
+          "description": "Where pull writes verified releases.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "project",
+    "sourceLocale",
+    "locales"
+  ],
+  "additionalProperties": false
+}

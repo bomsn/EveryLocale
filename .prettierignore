@@ -5,7 +5,7 @@ artifacts/
 test-results/
 docs/benchmarks/
 tools/import-benchmark.ts
-packages/react/src/flags.ts
+packages/react/flags/
 packages/server/public/guides/
 packages/server/public/flags/
 pnpm-lock.yaml

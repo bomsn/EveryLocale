@@ -64,11 +64,15 @@ async function discardCorrections() {
   return true;
 }
 
+/** Project locales come from the service registry; suggestions cover projects being created. */
+const localeDefinition = (locale) =>
+  state.project?.locales?.find((item) => item.id === locale) ??
+  state.locales.find((item) => item.id === locale);
 const names = new Proxy(
   {},
   {
     get: (labels, locale) =>
-      state.locales.find((item) => item.id === locale)?.label ??
+      localeDefinition(locale)?.label ??
       new Intl.DisplayNames([locale], { type: 'language' }).of(locale),
   },
 );
@@ -189,7 +193,7 @@ async function guarded(action) {
 }
 function localeLabel(locale) {
   const wrapper = element('div', undefined, 'locale-label');
-  const definition = state.locales.find((item) => item.id === locale);
+  const definition = localeDefinition(locale);
   if (definition?.flag) {
     const flag = element('img', undefined, 'flag');
     flag.src = '/assets/flags/' + definition.flag + '.svg';
@@ -636,7 +640,7 @@ function renderDetail() {
   const editor = element('textarea', undefined, 'translation-copy');
   editor.id = 'translation';
   editor.value = job.translation ?? '';
-  editor.dir = state.locales.find((item) => item.id === job.locale)?.direction ?? 'auto';
+  editor.dir = localeDefinition(job.locale)?.direction ?? 'auto';
   editor.lang = job.locale;
   editor.disabled = !['review', 'approved'].includes(job.status) || !can('review');
   editor.rows = Math.min(12, Math.max(3, Math.ceil(editor.value.length / 70)));
@@ -888,8 +892,8 @@ function codeBlock(code) {
 }
 function renderIntegration() {
   const project = state.project?.id ?? 'your-project',
-    locale = state.project?.targetLocales[0] ?? 'ar',
-    locales = state.project?.targetLocales.join(',') || 'ar,zh-Hant-TW,de,es,fr',
+    locale = state.project?.targetLocales[0] ?? 'LOCALE',
+    locales = state.project?.targetLocales.join(',') || 'LOCALES',
     container = $('#integration-guide');
   container.replaceChildren();
   const guides = {
@@ -1224,7 +1228,7 @@ function addTerm(entry = { source: '', keep: true, targets: {} }) {
   $('#glossary-fields').append(row);
 }
 function setupLanguageFields(project) {
-  const selected = project?.targetLocales ?? ['ar', 'zh-Hant-TW', 'de', 'es', 'fr'];
+  const selected = project?.targetLocales ?? [];
   $('#target-choices').replaceChildren();
   for (const locale of state.locales) {
     const label = element('label'),

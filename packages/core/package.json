@@ -4,7 +4,8 @@
   "type": "module",
   "license": "MIT",
   "files": [
-    "dist"
+    "dist",
+    "schema"
   ],
   "exports": {
     ".": {
@@ -22,6 +23,15 @@
     "./validation": {
       "types": "./dist/validation.d.ts",
       "import": "./dist/validation.js"
+    },
+    "./schema/config-1.json": "./schema/config-1.json",
+    "./service-url": {
+      "types": "./dist/service-url.d.ts",
+      "import": "./dist/service-url.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
     }
   },
   "scripts": {

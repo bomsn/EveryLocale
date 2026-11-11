@@ -14,10 +14,11 @@ import {
   documentPreview,
   validateTranslation,
   PIPELINE_REVISION,
-  DEFAULT_LOCALES,
+  localeTraits,
 } from '@everylocale/core';
 import type { LocalizationStore, Scope } from '@everylocale/store';
 import type { ChatGptConnection } from './chatgpt.js';
+import { projectLocales, suggestedLocales } from './locales.js';
 
 export type AppConfig = {
   adminToken: string;
@@ -131,7 +132,7 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
     z.object({ project: z.string() }).parse(request.params).project;
   const jobId = (request: FastifyRequest) => z.object({ id: z.string() }).parse(request.params).id;
   app.get('/health', async () => ({ status: 'healthy' }));
-  app.get('/api/v1/locales', async () => DEFAULT_LOCALES);
+  app.get('/api/v1/locales', async () => suggestedLocales());
   app.get('/', async (request, reply) => reply.sendFile('index.html'));
   app.post('/api/v1/session', async (request, reply) => {
     for (const [ip, entry] of loginAttempts)
@@ -189,7 +190,13 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
     const user = identity(request);
     if (!user.scopes.includes('read'))
       throw new ContractError('forbidden', 'This token cannot read project configuration', 403);
-    return store.listProjects().filter((x) => user.owner || x.id === user.projectId);
+    return store
+      .listProjects()
+      .filter((x) => user.owner || x.id === user.projectId)
+      .map((project) => ({
+        ...project,
+        locales: projectLocales(project.sourceLocale, project.targetLocales),
+      }));
   });
   app.get('/api/v1/operations', async (request) => {
     if (!identity(request).owner)
@@ -238,7 +245,12 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
   app.get('/api/v1/projects/:project', async (request) => {
     const id = projectId(request);
     access(request, id, 'read');
-    return { ...store.getProject(id), pipelineRevision: PIPELINE_REVISION };
+    const project = store.getProject(id);
+    return {
+      ...project,
+      locales: projectLocales(project.sourceLocale, project.targetLocales),
+      pipelineRevision: PIPELINE_REVISION,
+    };
   });
   app.post('/api/v1/projects/:project/tokens', async (request) => {
     const user = identity(request),
@@ -398,7 +410,7 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
       .parse(request.params);
     const preview = store.previewDocument(id, namespace, locale);
     const frame = (content: string, language: string) =>
-      `<!doctype html><html lang="${language}" dir="${DEFAULT_LOCALES.find((item) => item.id === language)?.direction ?? 'ltr'}"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${styleNonce}'; base-uri 'none'; form-action 'none'"><style nonce="${styleNonce}">body{font:16px/1.7 system-ui,sans-serif;padding:20px;color:#26322e;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{border:1px solid #bbc9bd;padding:8px}pre{white-space:pre-wrap}blockquote{border-inline-start:3px solid #bbc9bd;padding-inline-start:16px}</style></head><body>${documentPreview(content, preview.format)}</body></html>`;
+      `<!doctype html><html lang="${language}" dir="${localeTraits(language).direction}"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${styleNonce}'; base-uri 'none'; form-action 'none'"><style nonce="${styleNonce}">body{font:16px/1.7 system-ui,sans-serif;padding:20px;color:#26322e;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{border:1px solid #bbc9bd;padding:8px}pre{white-space:pre-wrap}blockquote{border-inline-start:3px solid #bbc9bd;padding-inline-start:16px}</style></head><body>${documentPreview(content, preview.format)}</body></html>`;
     return {
       isPreview: true,
       pendingUnits: preview.pendingUnits,

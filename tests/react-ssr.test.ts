@@ -5,23 +5,38 @@ import { renderToString } from 'react-dom/server';
 import {
   EveryLocaleProvider,
   Message,
-  LanguageSelector,
+  LanguageLinks,
+  LanguageSelect,
   LocaleFlag,
   LanguageSuggestion,
 } from '../packages/react/dist/index.js';
+import tw from '../packages/react/flags/tw.js';
 import { resolveRequest, PublishedRegistry } from '../packages/adapters/dist/index.js';
+import { defineLocales } from '../packages/core/dist/index.js';
 
-const registry = new PublishedRegistry('https://example.test', [
-  {
-    id: 'about',
-    variants: [
-      { locale: 'en', path: '/about', approvalRevision: 'r1', title: 'About' },
-      { locale: 'ar', path: '/ar/about', approvalRevision: 'r1', title: 'حول' },
-      { locale: 'zh-Hant-TW', path: '/zh-tw/about', approvalRevision: 'r1', title: '關於' },
-      { locale: 'de', path: '/de/about', approvalRevision: 'r1', title: 'Über uns' },
-    ],
-  },
+const locales = defineLocales('en', [
+  'ar',
+  { id: 'zh-Hant-TW', prefix: 'zh-tw' },
+  'de',
+  'es',
+  'fr',
 ]);
+
+const registry = new PublishedRegistry(
+  'https://example.test',
+  [
+    {
+      id: 'about',
+      variants: [
+        { locale: 'en', path: '/about', approvalRevision: 'r1', title: 'About' },
+        { locale: 'ar', path: '/ar/about', approvalRevision: 'r1', title: 'حول' },
+        { locale: 'zh-Hant-TW', path: '/zh-tw/about', approvalRevision: 'r1', title: '關於' },
+        { locale: 'de', path: '/de/about', approvalRevision: 'r1', title: 'Über uns' },
+      ],
+    },
+  ],
+  locales,
+);
 const approved: Record<string, string> = {
   en: 'Hello {name}',
   ar: 'مرحبًا {name}',
@@ -34,7 +49,7 @@ function render(url: string) {
   const request = new Request(url, {
     headers: { cookie: 'el_locale=en', 'accept-language': 'fr' },
   });
-  const selected = resolveRequest(request);
+  const selected = resolveRequest(request, { locales });
   const page = registry.resolve(new URL(url).pathname);
   const message = approved[selected.locale];
   if (!page || page.variant.locale !== selected.locale || message === undefined)
@@ -87,18 +102,56 @@ test('server rendering uses the request-owned catalog and reciprocal metadata fo
   assert.equal(render('https://example.test/zh-cn/about').status, 404);
 });
 
-test('language controls render native labels and bundled flags without changing language from country', () => {
+test('language links are crawlable, mark the current page and skip unpublished locales', () => {
   const markup = renderToString(
-    h(LanguageSelector, { locale: 'ar', country: 'AE', onChange() {} }),
+    h(LanguageLinks, {
+      locale: 'ar',
+      locales,
+      label: 'Languages',
+      links: { en: '/about', ar: '/ar/about', 'zh-Hant-TW': '/zh-tw/about' },
+      flags: { tw },
+    }),
   );
+  assert.match(markup, /<nav aria-label="Languages">/);
+  assert.ok(markup.includes('href="/ar/about" hrefLang="ar" lang="ar" aria-current="page"'));
+  assert.match(markup, /hrefLang="zh-Hant-TW"[^>]*><span aria-hidden="true"[^>]*><svg/);
+  assert.doesNotMatch(markup, /lang="de"/, 'German has no published counterpart');
   assert.match(markup, /العربية/);
-  assert.match(markup, /<svg/);
-  assert.match(markup, /<option value="ar"[^>]*selected/);
-  assert.ok(renderToString(h(LocaleFlag, { locale: 'zh-Hant-TW' })).includes('<svg'));
+});
+
+test('the language select changes language only on submit and works as a plain form', () => {
+  const markup = renderToString(
+    h(LanguageSelect, {
+      locale: 'de',
+      locales,
+      action: '/language',
+      label: 'Sprache',
+      submitLabel: 'Wechseln',
+      hidden: { return: '/de/about' },
+    }),
+  );
+  for (const fragment of [
+    '<form method="get" action="/language">',
+    '<option value="de" lang="de" selected="">Deutsch</option>',
+    '<input type="hidden" name="return" value="/de/about"/>',
+    '<button type="submit">Wechseln</button>',
+  ])
+    assert.ok(markup.includes(fragment), fragment);
+  assert.doesNotMatch(markup, /onchange/i);
+});
+
+test('flags render only when the host supplies them, and country never changes the language', () => {
+  assert.equal(renderToString(h(LocaleFlag, { locale: 'zh-Hant-TW', flags: {} })), '');
+  assert.match(renderToString(h(LocaleFlag, { locale: 'zh-Hant-TW', flags: { tw } })), /<svg/);
+  assert.match(
+    renderToString(h(LocaleFlag, { locale: 'ar', country: 'MA', flags: { ma: '<svg id="ma">' } })),
+    /id="ma"/,
+  );
   assert.equal(
     renderToString(
       h(LanguageSuggestion, {
         locale: 'en',
+        locales,
         dismissed: false,
         onAccept() {},
         onDismiss() {},

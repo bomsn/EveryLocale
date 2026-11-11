@@ -1,9 +1,4 @@
-import {
-  alternates,
-  DEFAULT_LOCALES,
-  localeFromPath,
-  type LocaleDefinition,
-} from '@everylocale/core/locales';
+import { alternates, localeFromPath, type LocaleDefinition } from '@everylocale/core/locales';
 
 export type PublishedVariant = {
   locale: string;
@@ -29,13 +24,17 @@ export class PublishedRegistry {
   private readonly pages = new Map<string, PublishedPage>();
   private readonly routes = new Map<string, { pageId: string; variant: PublishedVariant }>();
   readonly origin: string;
+  /** The first registry entry; every publication needs a variant in it. */
+  readonly sourceLocale: string;
 
   constructor(
     origin: string,
     pages: readonly PublishedPage[],
-    private readonly locales: readonly LocaleDefinition[] = DEFAULT_LOCALES,
-    readonly sourceLocale = 'en',
+    locales: readonly LocaleDefinition[],
   ) {
+    const [source] = locales;
+    if (!source) throw new Error('The locale registry is empty');
+    this.sourceLocale = source.id;
     const base = new URL(origin);
     if (
       !['http:', 'https:'].includes(base.protocol) ||
@@ -81,7 +80,7 @@ export class PublishedRegistry {
         seen.add(item.locale);
         this.routes.set(item.path, Object.freeze({ pageId: input.id, variant: item }));
       }
-      if (!seen.has(sourceLocale))
+      if (!seen.has(source.id))
         throw new Error('A publication needs its original-language variant');
       this.pages.set(input.id, Object.freeze({ id: input.id, variants: Object.freeze(variants) }));
     }

@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import { nextMetadata, resolveRequest } from '@everylocale/adapters';
-import { DEFAULT_LOCALES } from '@everylocale/core';
-import { EveryLocaleProvider, Message, LocaleFlag } from '@everylocale/react';
+import { EveryLocaleProvider, Message, LanguageLinks, LocaleFlag } from '@everylocale/react';
+import tw from '@everylocale/react/flags/tw';
+import { locales } from '../locales';
 export const dynamic = 'force-dynamic';
 const pages: Partial<Record<string, { path: string; message: string; title: string }>> = {
   en: { path: '/about', message: 'Hello {name}', title: 'About' },
@@ -12,7 +13,7 @@ const pages: Partial<Record<string, { path: string; message: string; title: stri
 async function pageData(params: Promise<{ segments?: string[] }>) {
   const { segments = [] } = await params;
   const path = '/' + segments.join('/');
-  const selected = resolveRequest(new Request('https://example.test' + path));
+  const selected = resolveRequest(new Request('https://example.test' + path), { locales });
   const page = pages[selected.locale];
   if (!page || page.path !== path) notFound();
   return { selected, page };
@@ -27,6 +28,7 @@ export async function generateMetadata({ params }: { params: Promise<{ segments?
         Object.entries(pages).flatMap(([locale, item]) => (item ? [[locale, item.path]] : [])),
       ),
       selected.locale,
+      'en',
     ),
   };
 }
@@ -45,20 +47,16 @@ export default async function Page({ params }: { params: Promise<{ segments?: st
         <p>
           <Message id="greeting" values={{ name: 'Ali' }} />
         </p>
-        <LocaleFlag locale={selected.locale} />
+        <LocaleFlag locale={selected.locale} flags={{ tw }} />
       </EveryLocaleProvider>
-      <nav aria-label="Language">
-        {DEFAULT_LOCALES.flatMap((locale) => {
-          const counterpart = pages[locale.id];
-          return counterpart
-            ? [
-                <a key={locale.id} href={counterpart.path} lang={locale.id}>
-                  {locale.label}{' '}
-                </a>,
-              ]
-            : [];
-        })}
-      </nav>
+      <LanguageLinks
+        locale={selected.locale}
+        locales={locales}
+        label="Language"
+        links={Object.fromEntries(
+          Object.entries(pages).flatMap(([locale, item]) => (item ? [[locale, item.path]] : [])),
+        )}
+      />
     </main>
   );
 }

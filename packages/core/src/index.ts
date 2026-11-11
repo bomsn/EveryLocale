@@ -8,3 +8,4 @@ export * from './pipeline.js';
 export * from './formats/index.js';
 export * from './preview.js';
 export * from './service-url.js';
+export * from './config.js';

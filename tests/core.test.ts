@@ -7,11 +7,20 @@ import {
   matchLocale,
   resolveLocale,
   languageSuggestion,
-  arabicFlag,
+  flagCountry,
+  defineLocales,
   localizePath,
   alternates,
   rewriteHtmlLinks,
 } from '../packages/core/dist/index.js';
+
+const locales = defineLocales('en', [
+  'ar',
+  { id: 'zh-Hant-TW', prefix: 'zh-tw' },
+  'de',
+  'es',
+  'fr',
+]);
 
 test('approved internal-link rendering preserves Gutenberg markup and escapes localized destinations', () => {
   const source =
@@ -47,33 +56,43 @@ test('currency symbols cannot change or disappear during localization, including
 
 test('country and browser hints never override an explicit English preference', () => {
   assert.equal(
-    resolveLocale({ pathname: '/dashboard', privateSurface: true, profile: 'en', cookie: 'fr' }),
+    resolveLocale({
+      pathname: '/dashboard',
+      privateSurface: true,
+      profile: 'en',
+      cookie: 'fr',
+      locales,
+    }),
     'en',
   );
   assert.equal(
-    resolveLocale({ pathname: '/de/pricing', privateSurface: false, profile: 'en' }),
+    resolveLocale({ pathname: '/de/pricing', privateSurface: false, profile: 'en', locales }),
     'de',
   );
-  assert.equal(resolveLocale({ pathname: '/', privateSurface: false, cookie: 'fr' }), 'en');
-  assert.equal(languageSuggestion(['en-US', 'fr-FR'], 'en'), null);
-  assert.equal(languageSuggestion(['fr-FR', 'en'], 'en'), 'fr');
-  assert.equal(arabicFlag('MA'), 'ma');
-  assert.equal(arabicFlag('AE'), 'ae');
-  assert.equal(arabicFlag('TW'), 'sa');
-  assert.equal(arabicFlag(null), 'sa');
+  assert.equal(
+    resolveLocale({ pathname: '/', privateSurface: false, cookie: 'fr', locales }),
+    'en',
+  );
+  assert.equal(languageSuggestion(['en-US', 'fr-FR'], 'en', locales), null);
+  assert.equal(languageSuggestion(['fr-FR', 'en'], 'en', locales), 'fr');
+  // A region in the locale wins; otherwise a trusted visitor country, then the likely region.
+  assert.equal(flagCountry('zh-Hant-TW', 'US'), 'TW');
+  assert.equal(flagCountry('ar', 'MA'), 'MA');
+  assert.equal(flagCountry('ar', null), 'EG');
+  assert.equal(flagCountry('es', 'bad'), 'ES');
 });
 test('Chinese scripts stay distinct and language switching preserves queries and anchors', () => {
-  assert.equal(matchLocale('zh-TW'), 'zh-Hant-TW');
-  assert.equal(matchLocale('zh-HK'), 'zh-Hant-TW');
-  assert.equal(matchLocale('zh-CN'), null);
-  assert.equal(matchLocale('zh-Hans'), null);
+  assert.equal(matchLocale('zh-TW', locales), 'zh-Hant-TW');
+  assert.equal(matchLocale('zh-HK', locales), 'zh-Hant-TW');
+  assert.equal(matchLocale('zh-CN', locales), null);
+  assert.equal(matchLocale('zh-Hans', locales), null);
   assert.equal(
-    localizePath('/de/pricing?plan=pro#features', 'fr'),
+    localizePath('/de/pricing?plan=pro#features', 'fr', locales),
     '/fr/pricing?plan=pro#features',
   );
-  assert.throws(() => localizePath('//elsewhere.test/path', 'de'));
+  assert.throws(() => localizePath('//elsewhere.test/path', 'de', locales));
   assert.deepEqual(
-    alternates('https://example.test', { en: '/article', de: '/de/article' }).map(
+    alternates('https://example.test', { en: '/article', de: '/de/article' }, 'en').map(
       (x) => x.hreflang,
     ),
     ['en', 'de', 'x-default'],
