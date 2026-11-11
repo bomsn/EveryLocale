@@ -46,21 +46,31 @@ For each role using the connection, set `_PROVIDER=chatgpt`, `_ACCOUNT` to the s
 
 Run GitHub Actions against a persistent EveryLocale service with a scoped project token. Keep ChatGPT refresh credentials on that service. Ephemeral runners are unsuitable for rotating sessions. For a remote host, establish `ssh -L 1455:127.0.0.1:1455 user@host` from your computer, then run `pnpm chatgpt connect --callback-port 1455` on that host. Open its sign-in link in your local browser. The protected tunnel delivers the loopback callback to the service; do not expose it publicly. Commercial or remotely hosted offerings must verify the applicable [OpenAI eligibility](https://developers.openai.com/siwc/token-sharing-open-source).
 
-`EVERYLOCALE_CONCURRENCY` limits active jobs. `EVERYLOCALE_PROVIDER_INTERVAL_MS` sets the minimum interval between provider requests. Each project has a cumulative USD budget covering generation and review.
+`EVERYLOCALE_CONCURRENCY` limits active jobs (1 to 16, default 2). `EVERYLOCALE_PROVIDER_INTERVAL_MS` sets the minimum interval between provider requests (default 500). Each project has a cumulative USD budget covering generation and review.
+
+When a provider rejects the key, account, permission or model, translation pauses instead of failing every queued job. Fix the setting, restart, then choose **Resume** in the workspace or call `POST /api/v1/providers/resume`.
 
 ## Access
 
 `EVERYLOCALE_ADMIN_TOKEN` grants workspace administration. `EVERYLOCALE_SESSION_SECRET` signs browser sessions. Use independent random values of at least 32 characters.
 
-Create scoped project tokens in **Connect → Manage access**. Tokens have an expiry and can be revoked. Keep provider credentials and application access tokens in server-side environment variables.
+Create scoped project tokens in **Connect → Manage access**. Tokens have an expiry, can be limited to some locales and namespaces, and can be revoked. Workspace sessions are stored on the server: signing out ends a session at once, and the owner can sign out every session. Keep provider credentials and application access tokens in server-side environment variables.
 
 ## Deployment
 
-The default host is `127.0.0.1`, with port `4310`. For remote access, configure an HTTPS reverse proxy and set `EVERYLOCALE_PUBLIC_ORIGIN` to the exact public origin. Browser session mutations require that origin and a CSRF token.
+The default host is `127.0.0.1` (`EVERYLOCALE_HOST`), with port `4310` (`EVERYLOCALE_PORT`). For remote access, configure an HTTPS reverse proxy and set `EVERYLOCALE_PUBLIC_ORIGIN` to the exact public origin. Browser session mutations require that origin and a CSRF token.
+
+Behind a proxy, set `EVERYLOCALE_TRUST_PROXY` to the proxy addresses or CIDR ranges, comma-separated, such as `10.0.0.0/8`. Only those proxies may supply the client address, which sign-in rate limiting uses. Leave it unset when clients connect directly.
+
+`EVERYLOCALE_LOG_LEVEL` is one of `fatal`, `error`, `warn`, `info` (default), `debug` or `silent`. Logs are JSON lines with a request id that matches the `x-request-id` response header. They never contain tokens, cookies, source text or translations.
+
+Outside production, every API response is checked against its published schema, and a mismatch fails the request. Set `NODE_ENV=production` on production servers to skip the check; the container image does this.
 
 `EVERYLOCALE_DATABASE` selects the SQLite database path. Run one service instance per database. Docker stores the database in its `everylocale-data` volume and runs the service as a non-root user.
 
 ## Backups
+
+Set `EVERYLOCALE_BACKUP_DIR` to take backups on a schedule. Every `EVERYLOCALE_BACKUP_INTERVAL_HOURS` (default 24) the service writes a consistent online backup there, checks its integrity, and keeps the newest `EVERYLOCALE_BACKUP_KEEP` (default 7). A failed backup sends an `alert.backup_failed` notification.
 
 From the checkout, create a consistent online backup without stopping the service:
 
@@ -74,7 +84,7 @@ Destinations must be new files. A backup includes the live WAL state, approvals,
 
 ## Exception notifications
 
-Set `EVERYLOCALE_WEBHOOK_URL` and an independent `EVERYLOCALE_WEBHOOK_SECRET` of at least 32 characters. The receiver gets publication changes, exhausted budgets, failed jobs, and blocked automatic reviews. Events persist with the underlying change, retry with backoff, and retain a stable ID. After eight failed deliveries, owner operations show a dead delivery that can be retried after fixing the receiver.
+Set `EVERYLOCALE_WEBHOOK_URL` and an independent `EVERYLOCALE_WEBHOOK_SECRET` of at least 32 characters. The receiver gets publication changes (`publication.changed`) and alerts: `alert.translation_failed` and `alert.budget_exhausted` (grouped per project and failure code, with the count, example job ids and the action to take), `alert.review_required`, `alert.provider_unavailable`, `alert.queue_stalled` and `alert.backup_failed`. Events persist with the underlying change, retry with backoff, and retain a stable ID. After eight failed deliveries, owner operations show a dead delivery that can be retried after fixing the receiver.
 
 Verify `X-EveryLocale-Signature` as hex HMAC-SHA256 of `X-EveryLocale-Timestamp + '.' + raw request body`; compare safely and reject timestamps more than five minutes old. Deduplicate `X-EveryLocale-Event-Id`, processing each event once. A successful response is any HTTP 2xx. Notification detail excludes source text and credentials. Connect your own email, chat, or monitoring relay to this endpoint. Monitor authenticated `/api/v1/operations` for queue age, failures, spending, and dead deliveries; use `/health` for liveness.
 

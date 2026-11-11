@@ -26,10 +26,15 @@ jobs:
       - run: pnpm lint
       - run: pnpm knip
       - run: pnpm format:check
+      - run: pnpm punctuation
       - run: pnpm audit:prod
+      - run: pnpm size
       - run: pnpm test
+      - run: pnpm test:matrix
       - run: pnpm release:pack
       - run: pnpm test:next
+      - run: pnpm --filter everylocale-react-router-example exec playwright install --with-deps chromium
+      - run: pnpm test:browser
   image:
     runs-on: ubuntu-24.04
     steps:

@@ -14,6 +14,7 @@ test-results
 tools/import-benchmark.ts
 docs/*
 !docs/API.md
+!docs/openapi.json
 !docs/CONNECT.md
 !docs/INTEGRATION.md
 !docs/CONFIGURATION.md
@@ -22,3 +23,7 @@ docs/*
 !docs/WORKFLOW.md
 !docs/CLI.md
 !docs/OPERATIONS.md
+**/.everylocale
+**/.react-router
+examples/*/build
+**/playwright-report

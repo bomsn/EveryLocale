@@ -19,7 +19,7 @@
     "audit:prod": "pnpm audit --prod --audit-level low",
     "size": "tsx tools/bundle-size.ts",
     "test": "tsx --test --test-concurrency=4 tests/*.test.ts",
-    "ci:host": "pnpm build && pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check && pnpm audit:prod && pnpm size && pnpm test && pnpm test:matrix && pnpm release:pack && pnpm test:next && pnpm test:browser",
+    "ci:host": "pnpm build && pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check && pnpm punctuation && pnpm audit:prod && pnpm size && pnpm test && pnpm test:matrix && pnpm release:pack && pnpm test:next && pnpm test:browser",
     "ci:local": "tsx tools/ci-local.ts",
     "test:wordpress": "tsx tools/wordpress-smoke.ts",
     "test:next": "tsx tools/next-smoke.ts",
@@ -35,7 +35,8 @@
     "changeset": "changeset",
     "release:pack": "pnpm build && tsx tools/pack.ts",
     "test:browser": "tsx tools/browser-test.ts",
-    "test:matrix": "tsx tools/react-matrix.ts"
+    "test:matrix": "tsx tools/react-matrix.ts",
+    "punctuation": "tsx tools/punctuation.ts"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",

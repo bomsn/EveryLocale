@@ -54,7 +54,7 @@ Doctor checks settings and database integrity without making a paid request. A s
 
 Choose **New project**. Name it **My first app**, give it the identifier `first-app`, and keep English as the original language. Select German as the target and clear the other target-language checkboxes for this first trial. Use a US$1 total translation budget for this short example. Select **Automatic approval** and create the project.
 
-Automatic approval means a translation can be downloaded when its structure and AI review pass. Material findings still wait for attention. **Human review** makes every translation wait for your approval.
+Automatic approval means a translation can be downloaded when its structure and AI review pass. Material findings still wait for attention. **Human review gate** makes every translation wait for your approval. Later you can set finer [approval policies](WORKFLOW.md#approval-policies), for example a person translating legal text while AI handles the interface.
 
 ## 4. Add and translate the sample
 
@@ -84,8 +84,8 @@ Change `Create a project` to `Create your first project` in the original file, t
 
 ## Next: use this in your product
 
-- [Connect a files-based app](CONNECT.md#files-and-builds) and get a translated file from the CLI.
-- [Connect React or Next.js](CONNECT.md#react-and-nextjs) to display messages in your interface.
+- [Connect your app](CONNECT.md) with a config file, then `sync` and `pull` from your build.
+- [Show the messages](CONNECT.md#show-the-messages) with React Router, Next.js or any JavaScript runtime.
 - [Add GitHub Actions](CI-CD.md) after the manual workflow works.
 - [Prepare hosting, backups, and alerts](OPERATIONS.md) when moving to a server.
 

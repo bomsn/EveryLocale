@@ -1,123 +1,116 @@
 # Connect your app
 
-First [translate a sample file](GETTING-STARTED.md). This guide connects that working service to your product. You can start with files, use React components, or call the API from another stack.
+First [translate a sample file](GETTING-STARTED.md). This guide connects that working service to your product. Every stack starts the same way: a config file, then `sync` and `pull` from your build.
 
-Your app uses approved translations. EveryLocale runs separately and prepares them before a release. Keep your model keys on the service; your app or build only needs permission to work with its own project.
+Your app uses approved translations that live in its own repository or build. EveryLocale runs separately and prepares them. Model keys stay on the service; your build needs only a project token.
 
-## Files and builds
+## Install the packages
 
-Use this path if your app already reads a JSON/YAML/PO messages file, or if you want translated Markdown, MDX, or HTML documents.
+Packages are installed from release archives. Run `pnpm release:pack` in the EveryLocale checkout; it writes one archive per package to `artifacts/`. Copy the ones you need into `vendor/` in your app.
 
-### Give the build access
+| Package | Use |
+| --- | --- |
+| `@everylocale/cli` | The `everylocale` command for builds and CI |
+| `@everylocale/runtime` | Formats approved messages in any JavaScript runtime; loads verified releases on the server |
+| `@everylocale/react` | `EveryLocaleProvider`, `Message`, language links and select |
+| `@everylocale/react-router` | React Router 7 and 8 framework mode |
+| `@everylocale/adapters` | Request locale resolution, Next.js metadata, published-page registry, HTTP client |
+| `@everylocale/core` | Shared locale and config logic; a dependency of the others |
 
-In the workspace, open **Connect → Manage access** for your project. Create a token with `read`, `import`, `translate`, and `export` permissions. Copy it immediately; it is shown once. Set an expiry you can maintain.
+Packages depend on each other, so pin `core` and `runtime` to the archives in your app's `package.json`. Replace `VERSION` with the version in EveryLocale's root `package.json`:
 
-Open a second terminal in the EveryLocale checkout. Set the address and project token. Use the syntax for your shell:
-
-```powershell
-$env:EVERYLOCALE_URL = "http://localhost:4310"
-$env:EVERYLOCALE_TOKEN = "YOUR_PROJECT_TOKEN"
+```json
+{
+  "pnpm": {
+    "overrides": {
+      "@everylocale/core": "file:vendor/everylocale-core-VERSION.tgz",
+      "@everylocale/runtime": "file:vendor/everylocale-runtime-VERSION.tgz"
+    }
+  }
+}
 ```
+
+```sh
+pnpm add -D ./vendor/everylocale-cli-VERSION.tgz
+pnpm add ./vendor/everylocale-core-VERSION.tgz ./vendor/everylocale-runtime-VERSION.tgz
+```
+
+Add `react`, `react-router` or `adapters` the same way when you use them.
+
+## Describe your files
+
+Create `everylocale.config.json` at your app's root. This one matches `examples/quickstart` in the EveryLocale checkout:
+
+```json
+{
+  "version": 1,
+  "project": "first-app",
+  "sourceLocale": "en",
+  "locales": [{ "id": "de" }, { "id": "fr", "status": "draft" }],
+  "files": [
+    { "pattern": "locales/{locale}/{namespace}.json", "format": "json" },
+    { "pattern": "content/{locale}/{namespace}.md", "format": "markdown", "namespace": "content", "tags": ["help"] }
+  ]
+}
+```
+
+`locales/en/app.json` becomes the `app` namespace, and its key `save` becomes the message id `app:save`. German is live, so a release needs every German message approved. French is a draft: it may ship incomplete, with English text where a translation is not approved yet. The [CLI reference](CLI.md#the-config-file) lists every field.
+
+## Give the build access
+
+In the workspace, open **Connect → Manage access** and create a token with `read`, `import`, `translate` and `export`. Copy it now; it is shown once. You can limit a token to some locales or namespaces, for example for an agency that translates only French.
 
 ```sh
 export EVERYLOCALE_URL="http://localhost:4310"
 export EVERYLOCALE_TOKEN="YOUR_PROJECT_TOKEN"
 ```
 
-These are examples for your local service. Use HTTPS for a server on another computer. Do not use your workspace administrator token in your app or CI.
+In PowerShell, use `$env:EVERYLOCALE_URL = "..."`. A service on another computer must use HTTPS. Never give the workspace owner token to an app or CI.
 
-### Produce a translated file
-
-The following commands use the included sample and a project named `first-app` with German enabled. Run them from the EveryLocale checkout:
+## Sync, pull, check
 
 ```sh
-pnpm cli extract --input examples/messages.json --format json --namespace messages --output source.json
-pnpm cli sync --project first-app --input source.json --locales de --wait --timeout 600
-pnpm cli export --project first-app --locale de --output locales/de.catalog.json
-pnpm cli render --input examples/messages.json --format json --namespace messages --catalog locales/de.catalog.json --output locales/de.json
+pnpm exec everylocale sync --wait
+pnpm exec everylocale pull
+pnpm exec everylocale check
 ```
 
-The result `locales/de.json` keeps the original keys and variables. Configure your app to load that file when German is selected. The catalog file is the checked input to rendering; the rendered file is the original-format document your app can use.
+`sync` uploads your source files and queues translation. `--wait` returns once every live locale is approved, or lists what needs attention and fails. `pull` writes a verified release to `.everylocale/` and renders the translated files next to their sources, such as `locales/de/app.json`. `check` re-verifies everything offline, which suits a pull request check that has no access to the service.
 
-Change the input path, project identifier, namespace, and locales for your product. Input/output paths can be absolute, including paths to another repository. Reuse the namespace when updating the same document. For app code with explicit message declarations, use `extract-code` instead; see the [CLI reference](CLI.md).
+Already have translations? `everylocale import --locale de` sends them as candidates, so you keep their wording and only new or changed messages need translating.
 
-### Deliver several languages together
+Choose where releases live:
 
-Once every configured language has current approval, download a complete release:
+- **Commit them.** Run `pull` when translations are approved and commit `.everylocale/` with the rendered files. Builds need no access to the service, and `check` guards every change.
+- **Pull during the build.** The build runs `sync --wait` and `pull` before compiling. See [CI/CD](CI-CD.md).
 
-```sh
-pnpm cli pull --project first-app --output locales
-```
+## Show the messages
 
-`locales/current.json` contains the release identifier in its `revision` field. Read it once at the start of a build, then load files from `locales/releases/REVISION/`. That directory contains `en.json`, `de.json`, other configured language catalogs, and `bundle.json`. Each catalog stores translated values in its `messages` object.
+### React Router
 
-A failed translation stops delivery of the new release. The current deployed app remains available. Keep the previous release directory and previous application deployment for rollback. [Automate these steps in CI/CD](CI-CD.md) after the manual path works.
+`@everylocale/react-router` resolves the locale in the root loader and gives each route only the namespaces it uses. Pages render and hydrate from the same data, so there is no second language decision and no flash of the wrong language. `examples/react-router` is a complete app with five languages, including Arabic. The [runtime guide](INTEGRATION.md#react-router) explains each piece.
 
-## React and Next.js
+### Next.js
 
-These packages let your interface display declared messages, choose language per request, and offer an accessible language selector. They do not identify arbitrary strings automatically: replace your app's user-visible strings with explicit messages.
+Server components call `loadLocalization()` from `@everylocale/runtime/server` once per process and pass the messages a page needs to `EveryLocaleProvider`. `examples/next` is a working App Router app. See [the runtime guide](INTEGRATION.md#nextjs).
 
-### Install the same packaged release
+### Other JavaScript
 
-Run `pnpm release:pack` in EveryLocale. It creates three matching archives under `artifacts/`. Copy them into `vendor/` in your app repository. Replace `VERSION` with the version in EveryLocale's root `package.json`.
+`createFormatter({ locale, messages })` from `@everylocale/runtime` formats messages anywhere: workers, emails, CLIs and other frameworks.
 
-Before installation, add this portable override to your app's `package.json`:
+### Other languages and frameworks
 
-```json
-{
-  "pnpm": {
-    "overrides": {
-      "@everylocale/core": "file:vendor/everylocale-core-VERSION.tgz"
-    }
-  }
-}
-```
-
-Then run from your app folder:
-
-```sh
-pnpm add ./vendor/everylocale-core-VERSION.tgz ./vendor/everylocale-adapters-VERSION.tgz ./vendor/everylocale-react-VERSION.tgz
-```
-
-The override ensures all three packages use the same core. Keep the archives with your app so installation does not depend on an unrelated local checkout.
-
-### Render one message
-
-Use an approved catalog from your build. A catalog for the sample imported with the namespace `messages` contains `messages:welcome`:
-
-```tsx
-import { EveryLocaleProvider, Message } from '@everylocale/react';
-import catalog from './locales/de.catalog.json';
-
-export function Greeting() {
-  return (
-    <EveryLocaleProvider catalog={catalog}>
-      <Message id="messages:welcome" values={{ name: 'Sam' }} />
-    </EveryLocaleProvider>
-  );
-}
-```
-
-Set the document language to `de` for this example. A multilingual app chooses the appropriate approved catalog on the server for each request and passes that same catalog to the browser.
-
-Use the [runtime guide](INTEGRATION.md) for server loaders, Next.js server layouts, the language selector, Arabic fonts, and public-page search metadata. `examples/next` contains a working App Router app.
+Use the rendered files with your stack's own localization library. `pull` writes them in the same format as your sources: JSON, YAML, PO, Markdown, MDX or HTML. Or call the [HTTP API](API.md) from your server.
 
 ## WordPress
 
-Install the [WordPress connector](../adapters/wordpress/README.md) and enter the service address, project identifier, and project token in **Settings → EveryLocale**. Publishing or updating an original article creates translation work. Approved articles are delivered by WordPress's scheduled sync.
+Install the [WordPress connector](../adapters/wordpress/README.md) and enter the service address, project id and project token in **Settings → EveryLocale**. Publishing or updating an article creates translation work, and scheduled sync delivers approved articles. The connector creates localized articles and URLs, handles updates and withdrawal, and adds language alternates. It needs reliable scheduled tasks.
 
-The connector creates localized articles and URLs, handles source updates and withdrawal, and supplies language alternates. A production WordPress site needs reliable scheduled tasks. If another app caches its articles, connect the publication hook to that app's cache refresh.
+## What your app decides
 
-## Another language or framework
+- Where the language selector goes and how a signed-in person's choice is saved.
+- Which translated pages are published and linked.
+- When builds or publishing events start the next translation.
+- Who receives failure alerts and owns recovery.
 
-Use translated files with your stack's own localization library, or call the [HTTP API](API.md) from your server. The API supports import, translation jobs, progress, review, and approved exports. Model credentials stay on EveryLocale; a public browser must never receive a project token.
-
-## What your app needs to decide
-
-- How it loads the approved files and displays messages.
-- Where its language selector goes and how signed-in preferences are saved.
-- Which localized public pages are actually published.
-- How builds or publishing events start the next translation.
-- Who receives exceptions and owns recovery.
-
-EveryLocale provides the translation workflow, runtime helpers, and connectors. The host app supplies its own routes, account records, emails, report templates, and deployment process. [Language and SEO integration](INTEGRATION.md) explains those connection points.
+EveryLocale provides the workflow, the runtime and the connectors. Your app keeps its routes, accounts and deployment. [Runtime integration](INTEGRATION.md) explains those connection points.

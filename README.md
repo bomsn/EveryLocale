@@ -10,7 +10,7 @@ EveryLocale translates the text you change, checks the result with a separate AI
 
 ## How it fits into your work
 
-You write “Create a project” in your app's English messages file. EveryLocale prepares the other languages and protects variables, links, numbers, and formatting. Your build downloads the approved files and includes them in the next release. Visitors read those files; displaying a page does not make an AI request.
+You write "Create a project" in your app's English messages file. EveryLocale prepares the other languages and protects variables, links, numbers, and formatting. Your build runs `everylocale sync` and `everylocale pull` to get a verified release of approved translations and includes it in the next deployment. Visitors read those files; displaying a page does not make an AI request.
 
 The next time you change the wording, run the same workflow. Unchanged translations are reused. If a model request fails or a translation needs attention, the current app stays available while you resolve the issue.
 
@@ -30,10 +30,11 @@ Add your model settings to the generated `.env`, run `pnpm doctor` to check the 
 
 ## Choose what to translate
 
-- App messages: JSON, YAML, PO, and declared React/ICU messages.
+- App messages: JSON, YAML and PO files with ICU MessageFormat, described once in `everylocale.config.json`.
 - Written content: Markdown, MDX, HTML, and WordPress articles.
-- Your release process: CLI commands for GitHub Actions or another CI runner, plus a server-side HTTP API.
-- Your interface: React controls and request helpers for server-rendered React and Next.js, with right-to-left direction, native language names, and multilingual SEO helpers.
+- Your release process: a CLI for GitHub Actions or any CI runner, an offline `check` for pull requests, and a server-side HTTP API described by OpenAPI.
+- Your interface: a small runtime that formats precompiled messages in any JavaScript environment, typed message ids, React bindings, and adapters for React Router 7 and 8 and Next.js. Right-to-left direction, native language names, plural rules and multilingual SEO links come built in.
+- Your rules: per-namespace or per-tag policies decide whether AI or a person translates and whether approval is automatic, and tokens can be limited to some languages.
 
 Choose any target languages by their standard locale ids, such as `es`, `fr-CA` or `zh-TW`. Native names, text direction and plural rules come from the Unicode CLDR data built into Node.js and browsers. Your app still needs to render translated messages and provide localized routes; the [connection guide](docs/CONNECT.md) shows where that work belongs.
 
@@ -47,7 +48,7 @@ Screenshots use fictional example content.
 
 ## Guides
 
-| You want to… | Start here |
+| You want to | Start here |
 | --- | --- |
 | Translate your first file | [Get started](docs/GETTING-STARTED.md) |
 | Understand approvals, changes, and spending | [How the workflow works](docs/WORKFLOW.md) |

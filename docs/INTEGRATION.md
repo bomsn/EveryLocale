@@ -1,68 +1,187 @@
 # Runtime integration
 
-This guide is for the developer who makes an app display its prepared translations. Complete [the first translation](GETTING-STARTED.md), then follow [package installation and a first React message](CONNECT.md#react-and-nextjs) before implementing the routing below.
+This guide is for the developer who makes an app display its approved translations. It assumes a release already exists: [Connect your app](CONNECT.md) covers the config file, `sync` and `pull`.
 
-The request decides which language file to use. For example, `/de/pricing` must show German when shared with an English-speaking account. A private dashboard follows the person's saved choice instead. Your server and browser must use the same approved file for a page, so it does not appear in one language and switch during loading.
+The server decides the language once per request and renders with the messages of that language. The browser receives the same locale and the same messages, so a page never appears in one language and switches during loading. A shared link to `/de/pricing` shows German to everyone. A signed-in dashboard follows the person's saved choice instead.
 
-## Choose the integration you need
+## Messages and the runtime
 
-- **Existing localization library:** use the CLI to render files in your app's current format. You do not need EveryLocale's React runtime.
-- **React interface:** display declared messages with `EveryLocaleProvider` and `Message`; choose the approved catalog on the server.
-- **Server-rendered public pages:** add locale-aware routes and metadata to the same server rendering path.
-- **Content pages:** record which translated pages are published and use that record for navigation and search metadata.
+`pull` precompiles every message into the release, so browsers format messages without an ICU parser. `@everylocale/runtime` adds about 2.8 KB gzipped to a client bundle.
 
-The following sections explain the helpers and the host application's responsibilities. Keep account storage and deployment in the application that already owns them.
+```ts
+import { createFormatter } from '@everylocale/runtime';
+
+const { format } = createFormatter({ locale: 'de', messages });
+format('checkout:items', { count: 3 }); // "3 Artikel"
+```
+
+`messages` are the compiled messages of the namespaces a page uses. On the server, load them from the release:
+
+```ts
+import { loadLocalization } from '@everylocale/runtime/server';
+
+// Once per process. Fails if the release is missing, altered or does not cover the config.
+const localization = await loadLocalization();
+const messages = localization.messages('de', ['checkout']);
+```
+
+`localization.locales` lists the locales the app serves: the source locale and every live locale. Pass `drafts: true` to serve draft locales as well, for example on a preview deployment. Draft messages that are not approved yet use the source text, and `onFallback` is called once per draft locale with the ids concerned.
+
+A message id that is not in `messages` renders as the id and is reported once per locale through `onMissing` (by default `console.error`). Pass `missing: 'throw'` in tests and builds to fail instead.
+
+### Typed message ids
+
+`everylocale codegen` writes a declaration file that registers every message id and its arguments with TypeScript. With it in your project, `format('checkout:itms')` and `format('checkout:items', { count: 'three' })` are compile errors, and a message with rich-text tags requires a renderer for each tag. Run `everylocale codegen --check` in CI so the file stays current.
+
+### Keep the parser out of client bundles
+
+Client bundles format precompiled messages only, so they can replace FormatJS's parser with its parser-free build:
+
+- **Vite** (including React Router): add `everylocale()` from `@everylocale/react-router/vite` to `plugins`.
+- **webpack** (including Next.js): add `parserAlias()` from `@everylocale/runtime/bundler` to `resolve.alias` for client builds.
+
+Server code keeps the parser.
 
 ## React
 
-Build the locale registry once with `defineLocales(sourceLocale, targets)` from `@everylocale/core/locales`, and pass the same registry to every helper and control. Each target is a BCP 47 id or an object with `status`, `label`, `prefix` and `direction`; labels default to the language's own name and direction to its script. URL prefixes default to the lower-cased id, and the source locale is unprefixed.
+`@everylocale/react` works with React 18.3 and 19.
 
-Mount `EveryLocaleProvider` with the catalog chosen on the server for that request. Serialize that exact catalog into the hydration data; avoid a second browser-side language decision. Use `Message` or `useEveryLocale` for explicit ICU declarations.
+```tsx
+import { EveryLocaleProvider, Message, useMessages } from '@everylocale/react';
 
-`LanguageLinks` renders a navigation landmark with a link to each published counterpart of the page, marked with `hreflang` and `lang`; it works without JavaScript. `LanguageSelect` is a labelled select inside a GET form with an explicit submit button, so browsing options never navigates away; your server handles the submitted locale, saves the explicit preference, and redirects. Pass `onSelect` to handle the choice in the browser instead. `LanguageSuggestion` reads browser preferences after hydration and offers a dismissible suggestion. The host passes `dismissed`, `onAccept` and `onDismiss`, and decides where a dismissal is remembered. `LocaleFlag` shows a flag only for flags you import, such as `import tw from '@everylocale/react/flags/tw'`, so a page bundles only those flags. It uses the locale's region, then a trusted visitor `country`, then the language's likely region. Flags stand for countries, not languages; prefer language names alone where a country could be misread. For right-to-left languages, set direction on the HTML document and use logical CSS properties in layouts. Use `isolateIdentifier` or `<bdi dir="auto">` around mixed-direction identifiers. Use fonts with Arabic and CJK coverage in browser screens, PDF generation, emails, and exports.
+<EveryLocaleProvider locale={locale} messages={messages}>
+  <Checkout />
+</EveryLocaleProvider>;
 
-Localize control copy through the same approved catalog as the application; the controls have no built-in English text. `LanguageLinks` takes `label`, `LanguageSelect` takes `label` and `submitLabel`, and `LanguageSuggestion` requires `labels` with `region` (the accessible name), `dismiss`, and two renderers, `prompt(language)` and `accept(language)`. The renderers can use rich ICU messages; the language-name argument already carries language and direction isolation.
+function Checkout() {
+  const { format } = useMessages();
+  return (
+    <>
+      <h1>{format('checkout:title')}</h1>
+      <Message id="checkout:terms" values={{ link: (chunks) => <a href="/terms">{chunks}</a> }} />
+    </>
+  );
+}
+```
 
-## Arabic and Taiwan Chinese fonts
+There is no default locale: the provider takes the locale the server resolved. `Message` renders rich text. Each tag in the message, such as `<link>terms</link>`, is rendered by the function of the same name in `values`, which receives the formatted content as React nodes.
 
-Import `@everylocale/react/fonts.css` for optional, self-hosted Noto Sans Arabic and Noto Sans TC coverage. Set the document or translated element's `lang` to `ar` or `zh-Hant-TW`. The full Taiwan font is about 5.4 MB; it is a separate asset and loads only where used. A host can instead supply its own appropriately licensed fonts or subsets. Font licenses ship beside the assets.
+### Language controls
 
-For browser-generated PDF reports, load the selected fonts and await `document.fonts.ready` before exporting. Preserve `lang`, `dir`, logical layout, and `<bdi>` boundaries in the report template. For a native PDF renderer, use compatible font files and an Arabic shaping/bidirectional engine; font coverage alone does not implement shaping. Verify the actual host renderer's output, including embedded fonts and copied text.
+The controls contain no built-in text. Pass every label from your own messages.
 
-## Server-rendered React
+- `LanguageLinks` renders a navigation landmark linking to each published counterpart of the page, with `hreflang` and `lang`. It works without JavaScript and is crawlable. Pass `links`, the URL of the page in each locale; locales without a link are left out.
+- `LanguageSelect` is a labelled select in a GET form with a submit button, so moving through the options with a keyboard never navigates away. Your server handles the submitted locale, stores the explicit choice and redirects. Pass `onSelect` to handle the choice in the browser instead.
+- `LanguageSuggestion` offers the visitor's browser language once, after hydration, if the app serves it. The host passes `dismissed`, `onAccept` and `onDismiss`, and decides where a dismissal is remembered. `labels` provides the region name, the dismiss label, and `prompt(language)` and `accept(language)` renderers.
+- `LocaleFlag` shows a flag only for flags you import, such as `import tw from '@everylocale/react/flags/tw'`, so a page bundles only those. It uses the locale's region, then a trusted visitor `country`, then the language's likely region. Flags stand for countries, not languages; prefer language names alone where a flag could be misread.
 
-A server loader or route handler resolves `resolveRequest(request, {locales, profileLocale, privateSurface})` with the Fetch API `Request` your framework provides. Public pages select the catalog by URL; authenticated private surfaces use account preference, then explicit cookie, then English. Set `<html lang={locale} dir={direction}>` in the root. Build canonical and alternate links from `registry.metadata(pageId, locale)` and combine them with localized title, description and structured data from the same published registry.
+## React Router
 
-An optional language segment in the route keeps existing English URLs stable. Validate recognized prefixes and published page availability before rendering. Throw a 404 response for unknown locales or missing translations. The unavailable screen can offer the original-language link. Do not put English content under `/ar` or `/zh-tw` as fallback.
+`@everylocale/react-router` supports React Router 7 and 8 in framework mode. Put every localized route under an optional locale segment:
+
+```ts
+// app/routes.ts
+export default [
+  ...prefix(':locale?', [index('routes/home.tsx'), route('about', 'routes/about.tsx')]),
+  route('language', 'routes/language.ts'),
+] satisfies RouteConfig;
+```
+
+```ts
+// app/i18n.server.ts
+import { createI18n } from '@everylocale/react-router/server';
+
+export const i18n = await createI18n({ origin: 'https://example.com' });
+```
+
+```tsx
+// app/root.tsx
+export const loader = (args: Route.LoaderArgs) => i18n.root(args, ['app']);
+
+export function Layout({ children }: { children: ReactNode }) {
+  const data = useRouteLoaderData<typeof loader>('root');
+  return (
+    <html lang={data?.locale ?? 'en'} dir={data?.direction ?? 'ltr'}>
+      {/* head, body, Scripts */}
+    </html>
+  );
+}
+
+export default function App() {
+  return (
+    <EveryLocaleRouterProvider>
+      <Outlet />
+    </EveryLocaleRouterProvider>
+  );
+}
+```
+
+```tsx
+// app/routes/about.tsx
+export const loader = (args: Route.LoaderArgs) => ({ messages: i18n.messages(args, ['about']) });
+
+export const meta: Route.MetaFunction = ({ matches }) => [
+  { title: formatterOf(matches)?.format('about:heading') },
+  ...languageMeta(matches),
+];
+```
+
+- `i18n.root(args, namespaces)` resolves the locale and returns it with its direction, the served locales, the release revision and the root route's messages. `EveryLocaleRouterProvider` merges the messages of every matched route, and client navigation brings each route's namespaces with its data.
+- An unknown locale prefix, or the prefix of a draft locale the app does not serve, answers 404. A prefix in other letter case, such as `/DE/about`, redirects to `/de/about`.
+- `i18n.requirePublished(args, ['en', 'de'])` answers 404 when a page exists only in some locales, instead of showing source text under a foreign URL.
+- `i18n.switchLocale(args)` is the loader of the language form's route. It redirects `?locale=de&path=/about` to `/de/about` and stores the choice in the `el_locale` cookie. It refuses unknown locales and paths outside the site.
+- `languageMeta(matches)` returns canonical, reciprocal alternate and `x-default` links. A route's `meta` replaces its parents', so every route that exports `meta` includes them. `formatterOf(matches)` formats titles there, since `meta` cannot use hooks.
+- `useLocaleData()`, `useLocalizedPath()` (maps `/about` to `/de/about` for the current locale) and `languagePaths(data)` build navigation and language links.
+
+Signed-in pages pass `{ privateSurface: true, profileLocale }` as the last argument of `root`, `messages` and `requirePublished`. The saved preference then decides, followed by the explicit cookie and the source locale. Every loader of such a page passes the same options.
+
+`examples/react-router` is a complete app in six languages, tested in Chromium for server HTML, hydration, plurals, navigation, language links and accessibility.
 
 ## Next.js
 
-`examples/next` is a Next.js App Router example. Its optional catch-all route keeps English unprefixed. The root layout receives route parameters and renders matching `lang/dir`; `generateMetadata` uses `nextMetadata` with the same published paths as page rendering.
+`examples/next` is an App Router app. Its optional catch-all route keeps the source locale unprefixed. The layout and page resolve the locale from the path with `resolveRequest(request, { locales })`, where `locales` comes from `loadLocalization()`. They render `lang` and `dir`, and pass the page's messages to `EveryLocaleProvider`. `generateMetadata` uses `nextMetadata(origin, paths, locale, sourceLocale)` for canonical and alternate links from the same paths the page links to.
 
-The adapter functions are independent of Next.js version. A host chooses its routing structure, published registry, and metadata. Avoid middleware redirects based on geography or browser language. Use a suggestion and a consistently available selector instead.
+`next.config.mjs` lists `@everylocale/runtime` and `@everylocale/core` in `serverExternalPackages`, so release loading runs in Node unbundled. It applies `parserAlias()` to client builds.
 
-## Generic HTTP and files
+Do not redirect by geography or browser language. Offer `LanguageSuggestion` and a language selector instead.
 
-`EveryLocaleClient` is a server-side HTTP client. It imports sources, submits jobs with an idempotency key, reads progress, and exports approved catalogs. Any stack can use the documented HTTP API or consume catalog/document files from the CLI.
+## Locale rules
 
-Public applications should load a versioned artifact set into a fresh immutable map, validate completeness, then atomically switch the serving reference. Keep the previous map for rollback. Never mutate a global locale variable or per-request preference in shared state. Catalog caches include project, locale, and approved revision. HTML page caches include locale and publication revision; country decoration and account-specific data stay outside them.
+`resolveRequest(request, { locales, privateSurface, profileLocale })` from `@everylocale/adapters` accepts any Fetch API `Request`. Public pages take the locale from the URL prefix. Private surfaces use the saved profile preference, then the `el_locale` cookie, then the source locale. Country, currency and time zone are never inputs: keep them separate from language in your own code too.
 
-Emails resolve account language explicitly when a send is queued. Generated reports can call the core pipeline in a private background job for explanatory fields only, preserving quoted answers, evidence, measurements, and user content. A private consumer may use independently reviewed output without an editorial publication step; it must never feed that path into public artifacts. Cache by explanation source, locale, and pipeline revision. The public artifact API accepts only approved revisions; projects choose automatic approval after clean validation/review or an optional human gate.
+Locale ids are BCP 47. Native names, direction, likely scripts and plural rules come from the Unicode CLDR data in Node.js and browsers. `matchLocale` matches a preference to the closest served locale, and never matches a Simplified Chinese preference to Traditional Chinese.
+
+For right-to-left languages, set `dir` on the document and use logical CSS properties such as `margin-inline-start`. Wrap mixed-direction identifiers in `<bdi>`.
+
+## Arabic and Taiwan Chinese fonts
+
+Import `@everylocale/react/fonts.css` for optional, self-hosted Noto Sans Arabic and Noto Sans TC. Set `lang` to `ar` or `zh-Hant-TW` on the document or element. The full Taiwan font is about 5.4 MB, and the browser downloads it only for elements that use it. You can supply your own appropriately licensed fonts or subsets instead. Font licenses ship beside the assets.
+
+For PDF reports generated in a browser, load the fonts and wait for `document.fonts.ready` before exporting. Keep `lang`, `dir`, logical layout and `<bdi>` in the report template. A native PDF renderer needs an Arabic shaping and bidirectional engine; font coverage alone does not shape text.
 
 ## Publication and search
 
-Store published page records by translation group and locale, including approved revision, title, description, structured data, localized slug, and URL. Generate internal language links, self-canonical, reciprocal hreflang, English x-default, and sitemap entries from those same records. Include only published counterparts. Redirect previous approved slugs when they change. Keep language separate from currency, timezone, measured prompt language, and billing amounts.
+For translated pages and articles, record each published variant: page id, locale, path, approved revision and localized title. `PublishedRegistry(origin, pages, locales)` builds one immutable snapshot from those records. Its methods use that same snapshot:
 
-`PublishedRegistry(origin, pages, locales)` creates an immutable publication snapshot. Each variant needs its locale, path, approval revision, and localized title. Its `resolve`, `switch`, `metadata`, `structuredData`, and `sitemap` methods use that same snapshot. Missing routes return `null`; the host returns a real 404 and uses `original(pageId)` for the original-language link. Registry membership must be constructed from your approved release, never pending jobs. Structured-data fields beyond name, description, URL, and language remain the host's responsibility.
+- `resolve(path)` finds the page and locale for a path; `null` means 404.
+- `switch(pageId, locale)` and `paths(pageId)` give language links; `original(pageId)` links to the source-language page.
+- `metadata(pageId, locale)` gives canonical and alternate links, with `x-default` on the source.
+- `structuredData(pageId, locale, data)` adds the URL, language, title and description to your structured data.
+- `sitemap()` lists every published variant with its alternates.
+- `link(href, locale)` rewrites an internal link to its published counterpart, keeping query strings and anchors.
 
-Render internal links with `registry.link(href, locale)`. It replaces only known same-origin published counterparts, preserves query strings and anchors, and leaves unavailable or external links unchanged. Translation protects link destinations; this explicit rendering step handles localized navigation using approved publication data.
+Build the registry from your approved release, never from pending work. Swap the whole snapshot when a new release is published.
 
-For approved HTML or Gutenberg documents, use `rewriteHtmlLinks(content, href => registry.link(href, locale))`. This changes only anchor destinations while retaining block comments, code, and the original markup. The WordPress adapter performs the same publication-aware step when rendering article content and REST responses.
+For approved HTML or Gutenberg content, `rewriteHtmlLinks(content, (href) => registry.link(href, locale))` changes only link destinations, leaving block comments, code and markup intact. The WordPress connector does the same when it renders articles.
 
-The WordPress plugin automates linked drafts, approved publishing, source changes, withdrawal delivery, localized permalinks, alternate links, and old-slug redirects. Connect `everylocale_translation_published` to your product's cache invalidation/outbox; an authenticated downstream consumer must make delivery replay-safe. WordPress requires a reliable system cron to run scheduled translation synchronization and withdrawal retries.
+## Other servers
+
+`EveryLocaleClient(baseUrl, token)` from `@everylocale/adapters` is a small server-side client for the [HTTP API](API.md). Any stack can call the API or use the files `pull` renders.
+
+Load a new release into a fresh map and switch the serving reference atomically; keep the previous map for rollback. Never store the current locale in shared mutable state. Cache keys for rendered pages include the locale and the release revision.
 
 ## Extension points
 
-Locales come from one host registry built with `defineLocales`. Project target languages use standard BCP 47 identifiers; parsers and job contracts contain no language-specific branches except script and plural checks derived from CLDR data. Document formats implement `DocumentFormat` and are added with `registerFormat`. New OpenAI-compatible providers require endpoint/model/prices configuration. A non-compatible vendor needs a transport adapter implementing the same model-call and reservation contract.
-
-`TranslationStore` defines the engine storage interface; `LocalizationStore` adds project, review, document, and token management for the service and worker. Storage implementations must preserve transactional approval, lease, idempotency, and budget invariants.
+- **Document formats.** A format is a default export `{ id, kind: 'messages' | 'content', extract }`. List its package in the config's `formats` and use its `id` in `files`.
+- **Model providers.** Any OpenAI-compatible endpoint works through configuration; see [Configuration](CONFIGURATION.md). Another vendor needs a transport that implements the same call and cost reservation contract.
+- **Storage.** `TranslationStore` is the engine's storage interface and `LocalizationStore` adds projects, review, documents and tokens. An implementation must keep the transactional approval, lease, idempotency and budget guarantees.

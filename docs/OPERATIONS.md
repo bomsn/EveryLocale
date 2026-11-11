@@ -21,13 +21,17 @@ For remote access, put an HTTPS reverse proxy in front of the service and set `E
 
 ## Confirm it is working
 
-Run `pnpm doctor` to check configuration and local database integrity. Open the workspace, translate a small real sample, and verify the downloaded result. `/health` reports whether the HTTP service is alive; it does not prove a provider can translate.
+Run `pnpm doctor` to check configuration and database integrity. It only reads: it never changes the database. Open the workspace, translate a small real sample, and verify the downloaded result. `/health` reports whether the HTTP service is alive; it does not prove a provider can translate.
+
+Logs are JSON lines on standard output, with a request id that matches each response's `x-request-id` header and the `requestId` of an error. They never contain tokens, cookies, source text or translations. Set the level with `EVERYLOCALE_LOG_LEVEL`.
 
 In the workspace, inspect failures and spending. An authenticated request to `/api/v1/operations` also reports queue health and delivery failures. Monitor the host externally so an outage is detected even when EveryLocale cannot send its own alert.
 
 ## Back up and prove recovery
 
-For a native checkout using the default database, run from the repository root:
+The simplest protection is a schedule: set `EVERYLOCALE_BACKUP_DIR` and the service writes a verified backup every day, keeps the newest seven, and sends `alert.backup_failed` if one fails. [Configuration](CONFIGURATION.md#backups) has the settings. Copy the backups off the host as well.
+
+For a one-off backup from a native checkout using the default database, run from the repository root:
 
 ```sh
 pnpm maintenance backup --output data/backups/snapshot.sqlite
@@ -64,7 +68,8 @@ The receiver must verify the signature and process each event ID once. After eig
 
 | Situation | Recovery |
 | --- | --- |
-| Provider outage or rejected key | Fix provider access, restart if settings changed, then retry failed jobs. Keep the deployed app unchanged. |
+| Provider outage | Queued work waits and continues when the provider recovers; `alert.provider_unavailable` repeats hourly meanwhile. |
+| Rejected key, account or model | Translation pauses and queued work waits. Fix the setting, restart, then resume in the workspace. Keep the deployed app unchanged. |
 | Review needs attention | Open the findings, edit if needed, and approve the exact revision under your policy. Rerun the build. |
 | Project budget exhausted | Inspect spending and reservations, raise the total limit if appropriate, and retry. No provider is changed automatically. |
 | Notification delivery failed | Fix the receiver; retry dead deliveries through owner operations. |
@@ -75,5 +80,7 @@ The receiver must verify the signature and process each event ID once. After eig
 ## Update without losing data
 
 Keep the database volume, secrets, and previous application release. Back up before updating the service. Build and verify the new version, restart with the existing storage, and exercise an approved export plus one new translation. Do not run independent service replicas against separate copies of the same SQLite database.
+
+A new version may upgrade the database schema when it starts. It first writes a copy of the old database next to it, named `DATABASE.vOLD-TIMESTAMP.backup.sqlite`, and runs each upgrade step in its own transaction. The log records `database_migrated`. A version older than the database refuses to start rather than damage it. To go back after an upgrade, restore that copy with the previous version.
 
 A translation approval allows export; your application or publishing connector performs delivery. The [CI/CD guide](CI-CD.md) explains how to stop a release when translation is incomplete.

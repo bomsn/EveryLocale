@@ -1,88 +1,117 @@
 # HTTP API v1
 
-Use this reference when writing a server-side integration. For a ready-made file workflow, start with [the CLI guide](CONNECT.md#files-and-builds).
+Use this reference when writing a server-side integration. For files and builds, the [CLI](CLI.md) already does this work.
 
-Create the project in the workspace first, then issue a scoped token in **Connect → Manage access**. Send it in `Authorization: Bearer YOUR_PROJECT_TOKEN`. Use HTTPS for remote access and keep the token out of public browser code.
+Every endpoint, with its parameters, request body, response schema and required access, is in the OpenAPI 3.1 document. A running service serves it at `/api/v1/openapi.json`, and the repository has a copy in [`docs/openapi.json`](openapi.json). Generate a client from it, or open it in any OpenAPI viewer. The document is produced from the same schemas that validate requests, so it describes exactly what the service accepts and returns.
 
-The normal flow is **import text → request translations → wait for approval → download approved output**. Import does not start translation or incur model charges. A job is one segment in one target language. A catalog is a language's approved messages; a document export keeps the original file format. Choose automatic or human approval in the project's settings.
+## Authentication
 
-All project endpoints require an owner bearer token or a token scoped to that project. Browser sessions use an HttpOnly signed cookie, the exact configured Origin, and `X-CSRF-Token` for mutations. Tokens and sessions never grant access to another project. Responses use `Cache-Control: no-store`.
+Send a token in `Authorization: Bearer TOKEN`. The owner token (`EVERYLOCALE_ADMIN_TOKEN`) can do everything. Create project tokens in **Connect → Manage access**, or with `POST /api/v1/projects/{project}/tokens`. A project token belongs to one project and carries scopes:
 
-The prefix is `/api/v1`. A project identifier contains lowercase letters, digits, underscores, and hyphens.
+| Scope | Allows |
+| --- | --- |
+| `read` | Project configuration, jobs, progress, documents, previews and audit log |
+| `import` | Adding, updating and withdrawing sources; importing existing translations |
+| `translate` | Queuing and retrying translation |
+| `review` | Editing a candidate translation |
+| `approve` | Approving candidates and rolling back a locale |
+| `export` | Approved catalogs, bundles and documents |
 
-| Method / path                                                    | Permission | Purpose                                                                                               |
-| ---------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `GET /projects`                                                  | read       | List accessible project configurations and budget usage                                               |
-| `GET /projects/{project}`                                        | read       | Configuration and pipeline revision                                                                   |
-| `PUT /projects/{project}`                                        | owner      | Create/update project; source locale cannot change                                                    |
-| `POST /projects/{project}/sources`                               | import     | Import `{units:[SourceUnit]}`                                                                         |
-| `POST /projects/{project}/documents`                             | import     | Parse/import `{namespace,format,content}`                                                             |
-| `GET /projects/{project}/documents`                              | read       | Imported namespaces and source revisions                                                              |
-| `POST /projects/{project}/withdraw`                              | import     | Withdraw `{unitIds:[string]}` and linked publications                                                 |
-| `POST /projects/{project}/jobs`                                  | translate  | Submit `{unitIds,locales}` with `Idempotency-Key`                                                     |
-| `GET /projects/{project}/summary`                                | read       | Current-source coverage for each configured target; independent of pagination                         |
-| `GET /projects/{project}/jobs`                                   | read       | Progress; `cursor`, `limit` (1-200), optional `locale`, `status`, `search`, `current=true`            |
-| `GET /projects/{project}/jobs/{id}`                              | read       | Exact source, candidate, findings, cost and revision                                                  |
-| `GET /projects/{project}/jobs/{id}/validation`                   | read       | Current deterministic checks, separate from AI advice                                                 |
-| `PATCH /projects/{project}/jobs/{id}`                            | review     | `{revision,translation}`; queues independent review                                                   |
-| `POST /projects/{project}/jobs/{id}/approve`                     | approve    | `{revision,overrideReason?}`; binds exact revisions                                                   |
-| `POST /projects/{project}/approve`                               | approve    | Atomic `{entries:[{id,revision}]}` approval batch                                                     |
-| `POST /projects/{project}/jobs/{id}/retry`                       | translate  | Retry a failed current job                                                                            |
-| `POST /projects/{project}/preview`                               | read       | Format `{locale,message,values?}` with AST-derived defaults; returns text and typed example arguments |
-| `GET /projects/{project}/exports/{locale}`                       | export     | Approved catalog; `current=true` requires complete current sources                                    |
-| `POST /projects/{project}/exports/{locale}`                      | export     | Snapshot approved catalog for rollback                                                                |
-| `GET /projects/{project}/documents/{namespace}/export/{locale}`  | export     | Render a document after all current segments are approved                                             |
-| `GET /projects/{project}/documents/{namespace}/preview/{locale}` | read       | Sandboxed private source/translation preview; `isPreview=true` and untranslated segment IDs           |
-| `GET /projects/{project}/artifacts`                              | export     | Saved approved versions; optional `locale`                                                            |
-| `POST /projects/{project}/rollback`                              | approve    | `{locale,artifactId}`; never restores withdrawn content                                               |
-| `GET /projects/{project}/audit`                                  | read       | Latest 200 approval, editing, and configuration events                                                |
-| `GET /projects/{project}/tokens`                                 | owner      | Inspect token permissions, expiry, revocation; never plaintext keys                                   |
-| `POST /projects/{project}/tokens`                                | owner      | `{scopes,expiresAt}`; plaintext token returned only once                                              |
-| `DELETE /projects/{project}/tokens/{id}`                         | owner      | Revoke access and existing sessions                                                                   |
+A token can also be limited to some `locales` and `namespaces`, for example an agency token for French help pages only. Anything outside its limits answers 404, as if it did not exist. A limited token cannot export the full bundle. Tokens expire and can be revoked at once. The secret is returned only when the token is created.
 
-`GET /health` is unauthenticated liveness. `GET /api/v1/locales` returns the public presentation registry. The review workspace is `/`.
+Credentials are checked before the request body, so a caller without access never sees validation details. Keep every token on servers. A project token is not a model provider key, and a public browser must never receive one.
 
-`GET /projects/{project}/bundle?current=true` requires export permission and returns every configured locale from one database snapshot. Its revision checksums the complete bundle. Each constituent catalog retains its own checksum and source revisions.
+The workspace signs in with `POST /api/v1/session`, which sets an HTTP-only session cookie. Session requests that change data must come from the configured public origin and carry the `x-csrf-token` header returned at sign-in. Signing out revokes the session on the server, and the owner can revoke every session with `DELETE /api/v1/sessions`.
 
-Owner-only operations: `GET /operations` reports queue age, failures, spending, and delivery status; `POST /deliveries/{id}/retry` retries a dead delivery. `GET /chatgpt/accounts`, `GET /chatgpt/accounts/{id}/models`, and `POST /chatgpt/accounts/{id}/disconnect` manage the optional ChatGPT provider. Account responses contain labels and connection state, never credentials. Browser mutations require Origin and CSRF protection.
+## The normal flow
 
-## Source unit
+1. **Import** sources: `POST /projects/{project}/documents` with a document of a registered format, or `POST /projects/{project}/sources` with source units. Importing makes no model request and costs nothing.
+2. **Translate**: `POST /projects/{project}/jobs` with `unitIds`, `locales` and an `idempotency-key` header. A job is one message in one target locale. Repeating the request with the same key returns the same jobs and spends nothing again.
+3. **Wait**: `GET /projects/{project}/requests/{key}` returns counts per status and per locale, plus every job that stops a release with its failure code.
+4. **Download**: `GET /projects/{project}/bundle` returns the approved catalogs of every locale as one checksummed bundle. `complete=de,fr` fails unless those locales are fully approved. `GET /projects/{project}/exports/{locale}` returns one locale, and `GET /projects/{project}/documents/{namespace}/export/{locale}` renders one document in its original format.
+
+## Source units
 
 ```json
 {
-  "id": "onboarding.welcome",
-  "source": "Welcome, {name}",
-  "sourceLocale": "en",
+  "id": "checkout:pay",
+  "source": "Pay {amount}",
   "kind": "icu",
-  "context": "Greeting after sign-in",
-  "protectedTerms": ["EveryLocale"]
+  "context": "Button on the payment step",
+  "protectedTerms": ["EveryLocale"],
+  "tags": ["checkout"]
 }
 ```
 
-Use stable explicit IDs for application messages. Text formats are parsed to protected segments; they are not sent as unrestricted document strings. A source hash includes the unit's source, context, kind, and protected terms. A translation cache adds target locale, glossary, language guidance, and pipeline revision. A translation record includes these source and context hashes, the source data, protected terms, candidate, review findings, approval revision, status, attempts, and measured cost.
+Ids are stable and take the form `namespace:key`. A unit's source revision covers its text, context, kind and protected terms; tags do not change it. Documents are parsed into units, and their structure is protected. Translations can never change markup, links, code, ICU arguments or placeholders.
 
-## Project configuration
+## Projects and policies
+
+`PUT /projects/{project}` creates or replaces a project (owner only):
 
 ```json
 {
-  "name": "Website",
+  "name": "Shop",
   "sourceLocale": "en",
-  "targetLocales": ["ar", "zh-Hant-TW", "de", "es", "fr"],
-  "budgetUsd": 5,
-  "approvalMode": "automatic",
+  "targetLocales": ["de", "fr-CA", "ar"],
+  "budgetUsd": 20,
+  "policies": [
+    { "match": { "tag": "legal" }, "translate": "human", "approve": "human" },
+    { "match": { "namespace": "marketing/**" }, "translate": "ai", "approve": "human" },
+    { "match": {}, "translate": "ai", "approve": "automatic" }
+  ],
+  "locked": ["common:brand.*"],
   "glossary": [{ "source": "EveryLocale", "targets": {}, "keep": true }],
-  "instructions": { "zh-Hant-TW": "Use Taiwan terminology." }
+  "instructions": { "fr-CA": "Use Canadian French terminology." },
+  "reviewerLanguage": "en"
 }
 ```
 
-Budget is cumulative per project. Removing a target disables exports for it. Lowering budget below spent plus reserved usage is rejected. Changing guidance invalidates candidate approvals; old published revisions remain available until replacement or withdrawal.
+Policies are checked in order and the first match applies. A match can name a `namespace` glob, a `key` glob and a `tag`. The last policy must match everything, so every message has an explicit rule. `translate: "human"` keeps the text away from every model: the job waits in `awaiting` until a person writes or imports a translation. `approve: "automatic"` approves a candidate that passes the structural checks and has no major or critical review findings; `approve: "human"` waits for a person. [How the workflow works](WORKFLOW.md#approval-policies) explains the choices.
 
-`approvalMode` accepts `automatic` or `human`. API requests that omit it default to `human`; the workspace selects `automatic` when creating a project. Only the owner can configure the mode. Automatic approval requires successful deterministic validation and no major or critical findings. Approval records the exact source and translation revisions, with audit actor `automation`. Changing mode applies to future job completions without approving queued candidates or changing translation context.
+`locked` lists unit id globs whose source text is used in every locale, such as brand names. `reviewerLanguage` is the language AI review findings are written in.
 
-## Jobs and failures
+The budget is cumulative, in US dollars, and covers generation and review. It cannot be lowered below what is already spent or reserved. Changing the glossary or instructions requires new checked candidates. Published revisions stay available until their replacements are approved.
 
-States are `pending`, `running`, `review`, `approved`, `failed`, and `stale`. Never publish from `review`. In automatic mode, clean AI-reviewed candidates transition to `approved` atomically; flagged candidates remain in `review`. In human mode, all candidates wait in `review`. Manual corrections re-enter the queue for independent review and preserve the old publication. A repeated idempotency key with the same source/configuration returns the original jobs; a different body/revision returns 409. Identical units with the same translation context reuse existing jobs. Reviewed translation memory may reuse wording when a segment moves; its new revision follows the configured approval mode.
+## Jobs
 
-Errors are `{error:{code,message}}`, with validation field names where appropriate. Codes include `revision_conflict`, `stale_source`, `structural_failure`, `review_findings`, `incomplete_catalog`, `incomplete_document`, `idempotency_conflict`, and `provider_configuration`. Clients should display the failure, reload conflicting revisions, and retry only replay-safe operations.
+| Status | Meaning |
+| --- | --- |
+| `pending` | Waiting for a worker or a budget reservation |
+| `running` | A model request is in progress |
+| `awaiting` | The policy needs a person to write the translation |
+| `review` | A candidate is ready; it waits for a person, or has findings to resolve |
+| `approved` | This exact candidate, for this exact source, can be exported |
+| `failed` | The job stopped; `failure` says why |
+| `stale` | The source changed after this translation |
 
-Project API keys are not provider API keys. Give WordPress `read/import/translate/export`, with no approval scope. Give editorial reviewers only the permissions they need. Keep all bearer tokens server-side in consuming applications.
+Editing (`PATCH /projects/{project}/jobs/{id}`) and approving (`POST .../approve`) take the `revision` the person saw and fail with `revision_conflict` if it changed meanwhile. Batch approval is all or nothing. Approval binds to the exact source and translation revisions. Approving a candidate with major findings needs an `overrideReason`, which the audit log records. Critical structural problems cannot be overridden.
+
+`POST /projects/{project}/translations` brings existing translations in as candidates. Each entry follows its message's policy as an edit would, and rejected entries are returned with the reason.
+
+## Failures
+
+A failed job carries one of these codes in `failure`. Alerts and the workspace use the same codes.
+
+| Code | Meaning | What to do |
+| --- | --- | --- |
+| `provider_configuration` | The provider rejected the key, account, permission or model. The provider is paused, and queued work waits. | Fix the settings, restart, resume the provider, then retry. |
+| `provider_unavailable` | The provider was unreachable or overloaded after retries. | Queued work continues when it recovers. |
+| `provider_rejected` | The provider refused this request, for example as too large. | Shorten or split the source, then retry. |
+| `provider_response` | The response was malformed, oversized or reported no usage. | Check that the endpoint is OpenAI-compatible and reports usage. |
+| `model_output_invalid` | The model did not return the required JSON. | Retry, or choose a model that supports JSON responses. |
+| `structure_invalid` | The source has invalid ICU or protected structure. | Correct the source and import it again. |
+| `budget_exhausted` | The project budget cannot cover the job. | Raise the budget if appropriate, then retry. |
+| `cost_overrun` | Usage exceeded the amount reserved for the job. | Check the configured prices and output limit. |
+| `lease_expired` | A worker stopped while processing the job three times. | Check the logs for restarts, then retry. |
+| `internal` | An unexpected error. | Check the logs, then retry. |
+
+## Errors
+
+Errors are JSON: `{ "error": { "code": "...", "message": "..." } }`. Validation errors (`422`, code `validation`) add `fields`, and unexpected errors (`500`, code `internal`) add `requestId`, which matches the `x-request-id` response header and the service logs. Common codes: `unauthorized`, `forbidden`, `not_found`, `revision_conflict`, `stale_source`, `structural_failure`, `review_findings`, `incomplete_catalog`, `idempotency_conflict`, `budget`, `provider_configuration` and `rate_limit`.
+
+Retry only replay-safe requests: `GET`, and `POST /jobs` with the same idempotency key. Reload and retry after `revision_conflict`.
+
+## Service endpoints
+
+`GET /health` answers while the process runs, without touching the database or providers. `GET /api/v1/operations` (owner only) reports budgets, queue age, failures, a paused provider and recent alerts. `POST /api/v1/providers/resume` resumes a paused provider. Every response carries `Cache-Control: no-store` and an `x-request-id`.

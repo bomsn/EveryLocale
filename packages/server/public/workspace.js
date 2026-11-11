@@ -385,8 +385,8 @@ function renderOverview() {
     : review
       ? review + ' translations are ready for your attention. Take them one language at a time.'
       : summary?.sourceUnits
-        ? 'Your current content, at a glance. Pick a language to see what’s next.'
-        : 'Start with a catalog or article. We’ll keep its structure intact.';
+        ? 'Your current content, at a glance. Pick a language to see what is next.'
+        : 'Start with a catalog or article. Its structure stays intact.';
   const nextAction = !state.project
     ? 'Create your first project'
     : !summary?.sourceUnits
@@ -928,40 +928,47 @@ function codeBlock(code) {
 function renderIntegration() {
   const project = state.project?.id ?? 'your-project',
     locale = state.project?.targetLocales[0] ?? 'LOCALE',
-    locales = state.project?.targetLocales.join(',') || 'LOCALES',
     container = $('#integration-guide');
   container.replaceChildren();
   const guides = {
     cli: {
       title: 'Your files. A repeatable workflow.',
       description:
-        'Run the CLI from your EveryLocale checkout. Store a scoped token in your shell or CI secrets. These packages are local releases, not published npm packages.',
+        'Describe your files once, then run the CLI from your build or CI with EVERYLOCALE_URL and a scoped EVERYLOCALE_TOKEN. Install the packages from pnpm release:pack as the setup guide describes.',
       steps: [
         [
-          'Extract the text you want to translate',
-          'Use explicit message declarations or a structured file. This example reads a JSON catalog.',
-          'pnpm cli extract --input ./messages.json --format json --namespace app --output ./source.json',
+          'Describe your files',
+          'Save this as everylocale.config.json at your app root. Each JSON file under locales/en becomes a namespace, such as app for locales/en/app.json.',
+          JSON.stringify(
+            {
+              version: 1,
+              project,
+              sourceLocale: state.project?.sourceLocale ?? 'en',
+              locales: (state.project?.targetLocales ?? ['LOCALE']).map((id) => ({ id })),
+              files: [{ pattern: 'locales/{locale}/{namespace}.json', format: 'json' }],
+            },
+            null,
+            2,
+          ),
         ],
         [
-          'Sync and wait for approved translations',
-          'Set EVERYLOCALE_URL and a scoped EVERYLOCALE_TOKEN in your environment. Clean translations approve automatically. Flagged or human-gated work pauses here for review.',
-          'pnpm cli sync --project ' +
-            project +
-            ' --input ./source.json --locales ' +
-            locales +
-            ' --wait --timeout 600',
+          'Sync and wait for approval',
+          'Uploads changed text and queues translation. Work that needs a person is listed with its reason and the command fails, so a release never ships incomplete.',
+          'pnpm exec everylocale sync --wait',
         ],
         [
-          'Deliver all languages as one release',
-          'Pull verifies complete current approvals and switches locales/current.json atomically. Read that pointer once per build. Keep previous releases for rollback.',
-          'pnpm cli pull --project ' + project + ' --output ./locales',
+          'Pull one verified release',
+          'Writes .everylocale with checksums and renders each translated file, such as locales/' +
+            locale +
+            '/app.json. Check verifies it offline in pull requests.',
+          'pnpm exec everylocale pull\npnpm exec everylocale check',
         ],
       ],
     },
     http: {
       title: 'One API for any stack.',
       description:
-        'Use server-to-server requests. Import, translate, review, and export have separate permissions. Full contracts are in docs/API.md in the checkout.',
+        'Use server-to-server requests. Import, translate, review, and export have separate permissions. Every endpoint is described at /api/v1/openapi.json.',
       steps: [
         [
           'Connect with a scoped token',
@@ -982,47 +989,44 @@ function renderIntegration() {
         ],
       ],
     },
-    remix: {
+    'react-router': {
       title: 'Language belongs in the request.',
       description:
-        'Use the packaged adapters with Remix 2. Resolve each request on the server and pass its approved catalog into your React provider. No framework upgrade is needed.',
+        'For React Router 7 and 8: the root loader resolves the locale once and each route brings only the messages it uses. The working app is examples/react-router.',
       steps: [
         [
-          'Install the local release',
-          'Run pnpm release:pack in EveryLocale. Follow docs/CONNECT.md for package installation, then docs/INTEGRATION.md for the tested Remix 2 loader pattern.',
+          'Install and pull a release',
+          'Install the cli, runtime, react and react-router archives from pnpm release:pack, then pull a release as in Files & CLI.',
         ],
         [
-          'Resolve and load on the server',
-          'Keep credentials in server environment variables. Public URL language takes priority.',
-          'import { resolveRequest, EveryLocaleClient } from "@everylocale/adapters";\n\nconst { locale, direction } = resolveRequest(request);\nconst client = new EveryLocaleClient(process.env.EVERYLOCALE_URL, process.env.EVERYLOCALE_TOKEN);\nconst catalog = await client.catalog("' +
-            project +
-            '", locale);',
+          'Resolve the locale in the root loader',
+          'Locale prefixes come from your config. Unknown prefixes answer 404 instead of showing another language.',
+          'import { createI18n } from "@everylocale/react-router/server";\n\nexport const i18n = await createI18n({ origin: "https://example.com" });\n\n// app/root.tsx\nexport const loader = (args) => i18n.root(args, ["app"]);',
         ],
         [
-          'Render with the same catalog',
-          'Use EveryLocaleProvider from @everylocale/react around your route. Set html lang and dir from the loader; use remixMeta for published alternates.',
+          'Give each route its messages',
+          'Wrap the app in EveryLocaleRouterProvider. It merges the messages of every matched route, so pages hydrate in the language they were rendered in.',
+          'export const loader = (args) => ({ messages: i18n.messages(args, ["checkout"]) });',
         ],
       ],
     },
     next: {
       title: 'Server rendering, without a language flash.',
       description:
-        'The Next.js example demonstrates concurrent Arabic, Taiwan Chinese, and German pages with approved catalogs and language-aware metadata.',
+        'Server components load the verified release once and pass each page only its messages. The working App Router app is examples/next.',
       steps: [
         [
-          'Install the local release',
-          'Run pnpm release:pack in EveryLocale. Use docs/CONNECT.md for package installation. The working app is in examples/next.',
+          'Install and pull a release',
+          'Install the cli, runtime, react and adapters archives from pnpm release:pack, then pull a release as in Files & CLI.',
         ],
         [
-          'Load approved words server-side',
-          'Resolve the incoming Request, fetch the catalog on the server, and pass it to your provider.',
-          'import { resolveRequest, EveryLocaleClient } from "@everylocale/adapters";\n\nconst { locale, direction } = resolveRequest(request);\nconst client = new EveryLocaleClient(process.env.EVERYLOCALE_URL, process.env.EVERYLOCALE_TOKEN);\nconst catalog = await client.catalog("' +
-            project +
-            '", locale);',
+          'Load approved words on the server',
+          'The release is verified when it loads; the browser receives the same messages the server rendered.',
+          'import { loadLocalization } from "@everylocale/runtime/server";\nimport { resolveRequest } from "@everylocale/adapters";\n\nconst localization = await loadLocalization();\nconst { locale, direction } = resolveRequest(request, { locales: localization.locales });\nconst messages = localization.messages(locale, ["about"]);',
         ],
         [
           'Keep publication and SEO together',
-          'Use nextMetadata with the published-page registry. Unavailable locales return an unavailable page rather than silently displaying another language.',
+          'Use nextMetadata with the same paths the page links to. A locale the app does not serve returns a 404 page rather than another language.',
         ],
       ],
     },
