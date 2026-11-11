@@ -1,6 +1,6 @@
 {
   "name": "@everylocale/runtime",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Framework-free formatting of approved, precompiled EveryLocale messages, and verified release loading on the server.",
   "type": "module",
   "license": "MIT",

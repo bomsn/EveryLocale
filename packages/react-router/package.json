@@ -1,6 +1,6 @@
 {
   "name": "@everylocale/react-router",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "React Router framework-mode integration: server-resolved locales and per-route precompiled messages.",
   "type": "module",
   "license": "MIT",
