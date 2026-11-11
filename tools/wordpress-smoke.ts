@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import type { TranslationRecord } from '../packages/core/dist/index.js';
+import { releaseVersion } from './process.js';
 
 const compose = ['compose', '-p', 'everylocale-smoke', '-f', 'tests/wordpress/compose.yaml'];
 const admin = 'disposable-owner-token-32-characters-long';
@@ -117,7 +118,7 @@ try {
       '-p',
       '127.0.0.1:4312:4310',
       ...Object.entries(environment).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
-      'everylocale:0.2.0',
+      `everylocale:${releaseVersion()}`,
     ],
     true,
   );

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: EveryLocale
  * Description: Translate WordPress content through your self-hosted EveryLocale workspace, with approval before publication.
- * Version: 0.2.0
+ * Version: 0.3.0
  * Requires at least: 6.4
  * Requires PHP: 8.0
  * License: MIT

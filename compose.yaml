@@ -1,7 +1,7 @@
 services:
   everylocale:
     build: .
-    image: everylocale:0.2.0
+    image: everylocale:0.3.0
     restart: unless-stopped
     env_file: .env
     environment:
