@@ -11,7 +11,7 @@
   "scripts": {
     "build": "pnpm flags:bundle && pnpm --filter \"./packages/**\" -r build && pnpm --filter everylocale-react-router-example typegen",
     "typecheck": "pnpm --filter \"./packages/**\" -r typecheck && tsc -p tsconfig.json",
-    "codegen": "tsx tools/config-schema.ts",
+    "codegen": "tsx tools/config-schema.ts && tsx tools/openapi.ts",
     "lint": "eslint .",
     "knip": "knip",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\" tools tests packages/server/public examples/next/app examples/react-router/app examples/react-router/tests \"examples/react-router/*.ts\" eslint.config.js knip.json",

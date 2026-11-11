@@ -120,6 +120,8 @@ export function loadConfig(store?: SqliteStore) {
     publicOrigin: origin.origin,
     logLevel: logLevel as LogLevel,
     trustProxy,
+    // Every response is checked against its declared schema except in production.
+    validateResponses: process.env.NODE_ENV !== 'production',
     backups,
     secureCookie: origin.protocol === 'https:',
     worker:

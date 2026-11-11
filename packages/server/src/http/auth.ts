@@ -2,21 +2,16 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
 import { ContractError } from '@everylocale/core';
 import {
+  SCOPES,
   withinLimits,
   type LocalizationStore,
   type Scope,
   type TokenLimits,
 } from '@everylocale/store';
 import type { AppConfig } from './context.js';
+import type { Authorize } from './contract.js';
 
-export const ALL_SCOPES: readonly Scope[] = [
-  'read',
-  'import',
-  'translate',
-  'review',
-  'approve',
-  'export',
-];
+const ALL_SCOPES: readonly Scope[] = SCOPES;
 const SESSION_COOKIE = 'el_session';
 const SESSION_TTL_MS = 8 * 3600000;
 const UNLIMITED: TokenLimits = { locales: null, namespaces: null };
@@ -79,22 +74,43 @@ export function createAuth(store: LocalizationStore, config: AppConfig) {
     return { owner: false, ...scoped, ...browser };
   };
 
+  /** A project operation: the caller owns the service or holds a token for this project and scope. */
+  const access = (request: FastifyRequest, project: string, scope: Scope): Identity => {
+    const user = identity(request);
+    if (!user.owner && user.projectId !== project)
+      throw new ContractError('not_found', 'Project not found', 404);
+    if (!user.scopes.includes(scope))
+      throw new ContractError('forbidden', 'This token cannot perform that operation', 403);
+    return user;
+  };
+  const owner = (request: FastifyRequest, action: string): Identity => {
+    const user = identity(request);
+    if (!user.owner) throw new ContractError('forbidden', `Only the owner can ${action}`, 403);
+    return user;
+  };
   return {
     identity,
-    /** A project operation: the caller owns the service or holds a token for this project and scope. */
-    access(request: FastifyRequest, project: string, scope: Scope): Identity {
-      const user = identity(request);
-      if (!user.owner && user.projectId !== project)
-        throw new ContractError('not_found', 'Project not found', 404);
-      if (!user.scopes.includes(scope))
-        throw new ContractError('forbidden', 'This token cannot perform that operation', 403);
-      return user;
-    },
-    owner(request: FastifyRequest, action: string): Identity {
-      const user = identity(request);
-      if (!user.owner) throw new ContractError('forbidden', `Only the owner can ${action}`, 403);
-      return user;
-    },
+    access,
+    owner,
+    /** Enforces the access an endpoint declares, before its query or body is read. */
+    authorize: ((request, endpoint, params) => {
+      switch (endpoint.access) {
+        case 'public':
+          return undefined;
+        case 'signed-in':
+          return identity(request);
+        case 'owner':
+          return owner(request, endpoint.ownerAction ?? 'do this');
+        default: {
+          if (typeof params?.project === 'string')
+            return access(request, params.project, endpoint.access);
+          const user = identity(request);
+          if (!user.scopes.includes(endpoint.access))
+            throw new ContractError('forbidden', 'This token cannot perform that operation', 403);
+          return user;
+        }
+      }
+    }) satisfies Authorize,
     /** Limited reviewer tokens see only their locales and namespaces; anything else is not found. */
     allows: (user: Identity, locale: string, unitId: string) => withinLimits(user, locale, unitId),
     requireAllowed(user: Identity, locale: string, unitId: string) {

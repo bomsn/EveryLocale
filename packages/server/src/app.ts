@@ -1,12 +1,14 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import staticFiles from '@fastify/static';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { ContractError } from '@everylocale/core';
 import type { LocalizationStore } from '@everylocale/store';
 import { createAuth } from './http/auth.js';
+import { Api, openApiDocument } from './http/contract.js';
 import type { AppConfig, RouteContext } from './http/context.js';
 import { sessionRoutes } from './routes/session.js';
 import { operationRoutes } from './routes/operations.js';
@@ -19,6 +21,9 @@ export type { AppConfig, LogLevel } from './http/context.js';
 export { LOG_LEVELS } from './http/context.js';
 
 const REQUEST_ID = /^[A-Za-z0-9._-]{8,128}$/;
+const VERSION = z
+  .object({ version: z.string() })
+  .parse(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))).version;
 
 export async function createApp(store: LocalizationStore, config: AppConfig) {
   const app = Fastify({
@@ -94,13 +99,9 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
       `default-src 'self'; script-src 'self'; style-src 'self' 'nonce-${styleNonce}'; img-src 'self' data:; frame-src 'self' about:; frame-ancestors 'none'; object-src 'none'; base-uri 'none'`,
     );
   });
-  const context: RouteContext = {
-    app,
-    store,
-    config,
-    auth: createAuth(store, config),
-    styleNonce,
-  };
+  const auth = createAuth(store, config);
+  const api = new Api(app, auth.authorize, config.validateResponses ?? true);
+  const context: RouteContext = { app, api, store, config, auth, styleNonce };
   for (const routes of [
     sessionRoutes,
     operationRoutes,
@@ -110,5 +111,19 @@ export async function createApp(store: LocalizationStore, config: AppConfig) {
     releaseRoutes,
   ])
     routes(context);
+  let document: ReturnType<typeof openApiDocument> | undefined;
+  api.route(
+    {
+      method: 'GET',
+      path: '/api/v1/openapi.json',
+      operationId: 'openApi',
+      summary: 'This API as an OpenAPI 3.1 document',
+      tag: 'Service',
+      access: 'public',
+      response: z.record(z.string(), z.unknown()),
+    },
+    // Built on first use, once every endpoint, this one included, is declared.
+    () => (document ??= openApiDocument(api.endpoints, VERSION)),
+  );
   return app;
 }

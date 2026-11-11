@@ -22,7 +22,7 @@ import * as access from './access.js';
 import * as sessions from './sessions.js';
 export type { Session } from './sessions.js';
 import type { DocumentOptions, Scope } from './decode.js';
-export { documentOptionsSchema, type DocumentOptions } from './decode.js';
+export { documentOptionsSchema, SCOPES, type DocumentOptions } from './decode.js';
 import type { ImportResult } from './approvals.js';
 import type { RequestStatus } from './jobs.js';
 export type { RequestStatus } from './jobs.js';

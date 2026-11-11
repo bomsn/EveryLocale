@@ -1,0 +1,4860 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EveryLocale API",
+    "version": "0.2.0",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "description": "Self-hosted localization service. Requests authenticate with a bearer token, or with the workspace session cookie plus the `x-csrf-token` header for changes."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    },
+    {
+      "session": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Service"
+    },
+    {
+      "name": "Session"
+    },
+    {
+      "name": "Providers"
+    },
+    {
+      "name": "Projects"
+    },
+    {
+      "name": "Content"
+    },
+    {
+      "name": "Translations"
+    },
+    {
+      "name": "Releases"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Liveness",
+        "description": "Touches no database or provider, so it answers while dependencies recover. `/api/v1/operations` reports their state.\n\nAccess: No credentials.",
+        "tags": [
+          "Service"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "healthy"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/locales": {
+      "get": {
+        "operationId": "suggestedLocales",
+        "summary": "Suggested locales with native names, directions and flags",
+        "description": "Access: No credentials.",
+        "tags": [
+          "Service"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Locale"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/session": {
+      "post": {
+        "operationId": "signIn",
+        "summary": "Start a workspace session",
+        "description": "Exchanges a token for an HTTP-only session cookie. Failed attempts are rate limited per client address.\n\nAccess: No credentials.",
+        "tags": [
+          "Session"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "csrf": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "csrf"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "session",
+        "summary": "The calling credential and its limits",
+        "description": "Access: Any valid credential.",
+        "tags": [
+          "Session"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "owner": {
+                      "type": "boolean"
+                    },
+                    "scopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "read",
+                          "import",
+                          "translate",
+                          "review",
+                          "approve",
+                          "export"
+                        ]
+                      }
+                    },
+                    "locales": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "namespaces": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "csrf": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "providersReady": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "owner",
+                    "scopes",
+                    "locales",
+                    "namespaces",
+                    "csrf",
+                    "providersReady"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "signOut",
+        "summary": "End this session",
+        "description": "Access: Any valid credential.",
+        "tags": [
+          "Session"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions": {
+      "delete": {
+        "operationId": "signOutEverywhere",
+        "summary": "Revoke every session the owner has open",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Session"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revoked": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "revoked"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations": {
+      "get": {
+        "operationId": "operations",
+        "summary": "Budgets, queues, provider pause and recent events",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Service"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "checkedAt": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Milliseconds since the Unix epoch"
+                    },
+                    "projects": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "spentUsd": {
+                            "type": "number"
+                          },
+                          "reservedUsd": {
+                            "type": "number"
+                          },
+                          "budgetUsd": {
+                            "type": "number"
+                          },
+                          "failed": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "pending": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "running": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "oldestPendingAt": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991,
+                                "description": "Milliseconds since the Unix epoch"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "spentUsd",
+                          "reservedUsd",
+                          "budgetUsd",
+                          "failed",
+                          "pending",
+                          "running",
+                          "oldestPendingAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "delivery": {
+                      "type": "object",
+                      "properties": {
+                        "pending": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "dead": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "pending",
+                        "dead"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "providers": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "paused": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "failure": {
+                                      "type": "string",
+                                      "enum": [
+                                        "provider_configuration",
+                                        "provider_unavailable",
+                                        "provider_rejected",
+                                        "provider_response",
+                                        "model_output_invalid",
+                                        "structure_invalid",
+                                        "budget_exhausted",
+                                        "cost_overrun",
+                                        "lease_expired",
+                                        "internal"
+                                      ]
+                                    },
+                                    "message": {
+                                      "type": "string"
+                                    },
+                                    "since": {
+                                      "type": "integer",
+                                      "minimum": -9007199254740991,
+                                      "maximum": 9007199254740991,
+                                      "description": "Milliseconds since the Unix epoch"
+                                    }
+                                  },
+                                  "required": [
+                                    "failure",
+                                    "message",
+                                    "since"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "paused"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "projectId": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "entityId": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "description": "Milliseconds since the Unix epoch"
+                          },
+                          "attempts": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "projectId",
+                          "type",
+                          "entityId",
+                          "detail",
+                          "createdAt",
+                          "attempts"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "checkedAt",
+                    "projects",
+                    "delivery",
+                    "providers",
+                    "events"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/providers/resume": {
+      "post": {
+        "operationId": "resumeProviders",
+        "summary": "Resume translation after a provider configuration failure",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Service"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deliveries/{id}/retry": {
+      "post": {
+        "operationId": "retryDelivery",
+        "summary": "Retry a webhook delivery that gave up",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Service"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chatgpt/accounts": {
+      "get": {
+        "operationId": "chatGptAccounts",
+        "summary": "Connected ChatGPT accounts",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Providers"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "connected": {
+                            "type": "boolean"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "paused": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "email",
+                          "connected",
+                          "enabled",
+                          "paused"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "usageUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "accounts",
+                    "usageUrl"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chatgpt/accounts/{id}/models": {
+      "get": {
+        "operationId": "chatGptModels",
+        "summary": "Models a connected ChatGPT account can use",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Providers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "slug": {
+                        "type": "string"
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "visibility": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "slug",
+                      "display_name",
+                      "visibility"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chatgpt/accounts/{id}/disconnect": {
+      "post": {
+        "operationId": "disconnectChatGpt",
+        "summary": "Disconnect a ChatGPT account and revoke its credentials",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Providers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revoked": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "revoked"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "Projects the credential can read",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Projects"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "sourceLocale": {
+                        "default": "en",
+                        "type": "string"
+                      },
+                      "targetLocales": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 2,
+                          "maxLength": 40
+                        }
+                      },
+                      "budgetUsd": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      "policies": {
+                        "default": [
+                          {
+                            "match": {},
+                            "translate": "ai",
+                            "approve": "human"
+                          }
+                        ],
+                        "minItems": 1,
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "match": {
+                              "default": {},
+                              "type": "object",
+                              "properties": {
+                                "namespace": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240,
+                                  "pattern": "^[\\w.:/*-]+$"
+                                },
+                                "key": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240,
+                                  "pattern": "^[\\w.:/*-]+$"
+                                },
+                                "tag": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 40
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "translate": {
+                              "default": "ai",
+                              "type": "string",
+                              "enum": [
+                                "ai",
+                                "human"
+                              ]
+                            },
+                            "approve": {
+                              "default": "human",
+                              "type": "string",
+                              "enum": [
+                                "automatic",
+                                "human"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "match",
+                            "translate",
+                            "approve"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "locked": {
+                        "default": [],
+                        "maxItems": 200,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240,
+                          "pattern": "^[\\w.:/*-]+$"
+                        }
+                      },
+                      "glossary": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "source": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "targets": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "keep": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "source",
+                            "targets"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "instructions": {
+                        "default": {},
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 4000
+                        }
+                      },
+                      "reviewerLanguage": {
+                        "default": "en",
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 40
+                      },
+                      "locales": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Locale"
+                        }
+                      },
+                      "spentUsd": {
+                        "type": "number"
+                      },
+                      "reservedUsd": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "sourceLocale",
+                      "targetLocales",
+                      "budgetUsd",
+                      "policies",
+                      "locked",
+                      "glossary",
+                      "instructions",
+                      "reviewerLanguage",
+                      "locales",
+                      "spentUsd",
+                      "reservedUsd"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}": {
+      "get": {
+        "operationId": "getProject",
+        "summary": "Project configuration",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "sourceLocale": {
+                      "default": "en",
+                      "type": "string"
+                    },
+                    "targetLocales": {
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 40
+                      }
+                    },
+                    "budgetUsd": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000000
+                    },
+                    "policies": {
+                      "default": [
+                        {
+                          "match": {},
+                          "translate": "ai",
+                          "approve": "human"
+                        }
+                      ],
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "match": {
+                            "default": {},
+                            "type": "object",
+                            "properties": {
+                              "namespace": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240,
+                                "pattern": "^[\\w.:/*-]+$"
+                              },
+                              "key": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240,
+                                "pattern": "^[\\w.:/*-]+$"
+                              },
+                              "tag": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "translate": {
+                            "default": "ai",
+                            "type": "string",
+                            "enum": [
+                              "ai",
+                              "human"
+                            ]
+                          },
+                          "approve": {
+                            "default": "human",
+                            "type": "string",
+                            "enum": [
+                              "automatic",
+                              "human"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "match",
+                          "translate",
+                          "approve"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "locked": {
+                      "default": [],
+                      "maxItems": 200,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240,
+                        "pattern": "^[\\w.:/*-]+$"
+                      }
+                    },
+                    "glossary": {
+                      "default": [],
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "targets": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "keep": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "source",
+                          "targets"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "instructions": {
+                      "default": {},
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "maxLength": 4000
+                      }
+                    },
+                    "reviewerLanguage": {
+                      "default": "en",
+                      "type": "string",
+                      "minLength": 2,
+                      "maxLength": 40
+                    },
+                    "locales": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Locale"
+                      }
+                    },
+                    "pipelineRevision": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "sourceLocale",
+                    "targetLocales",
+                    "budgetUsd",
+                    "policies",
+                    "locked",
+                    "glossary",
+                    "instructions",
+                    "reviewerLanguage",
+                    "locales",
+                    "pipelineRevision"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveProject",
+        "summary": "Create or replace a project",
+        "description": "The path id wins over any id in the body.\n\nAccess: The owner token or an owner session.",
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "sourceLocale": {
+                    "default": "en",
+                    "type": "string"
+                  },
+                  "targetLocales": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 2,
+                      "maxLength": 40
+                    }
+                  },
+                  "budgetUsd": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000000
+                  },
+                  "policies": {
+                    "default": [
+                      {
+                        "match": {},
+                        "translate": "ai",
+                        "approve": "human"
+                      }
+                    ],
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "match": {
+                          "default": {},
+                          "type": "object",
+                          "properties": {
+                            "namespace": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240,
+                              "pattern": "^[\\w.:/*-]+$"
+                            },
+                            "key": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 240,
+                              "pattern": "^[\\w.:/*-]+$"
+                            },
+                            "tag": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "translate": {
+                          "default": "ai",
+                          "type": "string",
+                          "enum": [
+                            "ai",
+                            "human"
+                          ]
+                        },
+                        "approve": {
+                          "default": "human",
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "human"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "locked": {
+                    "default": [],
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240,
+                      "pattern": "^[\\w.:/*-]+$"
+                    }
+                  },
+                  "glossary": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "targets": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "keep": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "source",
+                        "targets"
+                      ]
+                    }
+                  },
+                  "instructions": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 4000
+                    }
+                  },
+                  "reviewerLanguage": {
+                    "default": "en",
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "name",
+                  "targetLocales",
+                  "budgetUsd"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/tokens": {
+      "post": {
+        "operationId": "mintToken",
+        "summary": "Issue a project token",
+        "description": "The secret is returned once. `locales` and `namespaces` limit what the token can see and change.\n\nAccess: The owner token or an owner session.",
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scopes": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "read",
+                        "import",
+                        "translate",
+                        "review",
+                        "approve",
+                        "export"
+                      ]
+                    }
+                  },
+                  "expiresAt": {
+                    "type": "number",
+                    "description": "Milliseconds since the Unix epoch"
+                  },
+                  "locales": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 2,
+                      "maxLength": 40
+                    }
+                  },
+                  "namespaces": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240
+                    }
+                  }
+                },
+                "required": [
+                  "scopes",
+                  "expiresAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "token",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listTokens",
+        "summary": "Issued tokens, without their secrets",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "scopes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "read",
+                            "import",
+                            "translate",
+                            "review",
+                            "approve",
+                            "export"
+                          ]
+                        }
+                      },
+                      "locales": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "namespaces": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "created_at": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Milliseconds since the Unix epoch"
+                      },
+                      "expires_at": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Milliseconds since the Unix epoch"
+                      },
+                      "revoked": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "1 once revoked"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "scopes",
+                      "locales",
+                      "namespaces",
+                      "created_at",
+                      "expires_at",
+                      "revoked"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/tokens/{id}": {
+      "delete": {
+        "operationId": "revokeToken",
+        "summary": "Revoke a token immediately",
+        "description": "Access: The owner token or an owner session.",
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/audit": {
+      "get": {
+        "operationId": "auditLog",
+        "summary": "Who changed what, newest first",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Projects"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "entity_id": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string",
+                        "description": "JSON text"
+                      },
+                      "created_at": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "entity_id",
+                      "detail",
+                      "created_at"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/sources": {
+      "post": {
+        "operationId": "importSources",
+        "summary": "Add or update source messages",
+        "description": "Changed messages make their translations stale; identical ones are no-ops.\n\nAccess: A credential with the `import` scope.",
+        "tags": [
+          "Content"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "units": {
+                    "minItems": 1,
+                    "maxItems": 5000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        },
+                        "sourceLocale": {
+                          "default": "en",
+                          "type": "string",
+                          "minLength": 2,
+                          "maxLength": 40
+                        },
+                        "kind": {
+                          "default": "text",
+                          "type": "string",
+                          "enum": [
+                            "text",
+                            "icu",
+                            "html",
+                            "markdown"
+                          ]
+                        },
+                        "context": {
+                          "default": "",
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "protectedTerms": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          }
+                        },
+                        "tags": {
+                          "default": [],
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "source"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "units"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "unchanged": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "changed",
+                    "unchanged"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/documents": {
+      "post": {
+        "operationId": "importDocument",
+        "summary": "Add or replace a source document of a registered format",
+        "description": "Access: A credential with the `import` scope.",
+        "tags": [
+          "Content"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string"
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "options": {
+                    "default": {},
+                    "type": "object",
+                    "properties": {
+                      "frontMatter": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "tags": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        }
+                      },
+                      "origin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "content",
+                  "format",
+                  "namespace"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "unchanged": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "units": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sourceRevision": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "changed",
+                    "unchanged",
+                    "units",
+                    "sourceRevision"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listDocuments",
+        "summary": "Source documents and the messages extracted from each",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Content"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "type": "string"
+                      },
+                      "units": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "sourceRevision": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "options": {
+                        "type": "object",
+                        "properties": {
+                          "frontMatter": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "tags": {
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 40
+                            }
+                          },
+                          "origin": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "namespace",
+                      "format",
+                      "units",
+                      "sourceRevision",
+                      "options"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/documents/{id}/export/{locale}": {
+      "get": {
+        "operationId": "exportDocument",
+        "summary": "A document rendered with its approved translations",
+        "description": "Access: A credential with the `export` scope.",
+        "tags": [
+          "Content"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Document namespace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "namespace": {
+                      "type": "string"
+                    },
+                    "locale": {
+                      "type": "string"
+                    },
+                    "sourceRevision": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "namespace",
+                    "locale",
+                    "sourceRevision",
+                    "revision",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/documents/{namespace}": {
+      "delete": {
+        "operationId": "removeDocument",
+        "summary": "Withdraw a document and its messages",
+        "description": "Published revisions stay available until replaced.\n\nAccess: A credential with the `import` scope.",
+        "tags": [
+          "Content"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/withdraw": {
+      "post": {
+        "operationId": "withdrawSources",
+        "summary": "Withdraw source messages",
+        "description": "Access: A credential with the `import` scope.",
+        "tags": [
+          "Content"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "unitIds": {
+                    "maxItems": 5000,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "unitIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/preview": {
+      "post": {
+        "operationId": "previewMessage",
+        "summary": "Format a message in a locale with sample values",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Content"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "locale": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string",
+                    "maxLength": 100000
+                  },
+                  "values": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 1000
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "locale",
+                  "message"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "arguments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "text",
+                              "number"
+                            ]
+                          },
+                          "value": {
+                            "description": "Sample value used for the preview",
+                            "type": [
+                              "string",
+                              "number"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "type",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "arguments"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/documents/{namespace}/preview/{locale}": {
+      "get": {
+        "operationId": "previewDocument",
+        "summary": "Source and translated document as sandboxed HTML",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Content"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "isPreview": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "pendingUnits": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sourceRevision": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "description": "HTML document"
+                    },
+                    "translation": {
+                      "type": "string",
+                      "description": "HTML document"
+                    }
+                  },
+                  "required": [
+                    "isPreview",
+                    "pendingUnits",
+                    "sourceRevision",
+                    "source",
+                    "translation"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/jobs": {
+      "post": {
+        "operationId": "enqueue",
+        "summary": "Queue translation of messages into locales",
+        "description": "Repeating a request with the same `idempotency-key` returns the same jobs and spends nothing again.\n\nAccess: A credential with the `translate` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "unitIds": {
+                    "minItems": 1,
+                    "maxItems": 5000,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "locales": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "unitIds",
+                  "locales"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Translation"
+                      }
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listJobs",
+        "summary": "Translations, filtered and paged",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "running",
+                "awaiting",
+                "review",
+                "failed",
+                "stale",
+                "approved"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "false",
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TranslationWithPolicy"
+                      }
+                    },
+                    "cursor": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Pass back for the next page; null at the end"
+                    }
+                  },
+                  "required": [
+                    "records",
+                    "cursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/requests/{key}": {
+      "get": {
+        "operationId": "requestStatus",
+        "summary": "Progress of one submission, by its idempotency key",
+        "description": "`attention` lists what stops a release: failed, awaiting, in review or stale.\n\nAccess: A credential with the `read` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "counts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": [
+                          "pending",
+                          "running",
+                          "awaiting",
+                          "review",
+                          "failed",
+                          "stale",
+                          "approved"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "locales": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "running",
+                            "awaiting",
+                            "review",
+                            "failed",
+                            "stale",
+                            "approved"
+                          ]
+                        },
+                        "additionalProperties": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      }
+                    },
+                    "attention": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "unitId": {
+                            "type": "string"
+                          },
+                          "locale": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "running",
+                              "awaiting",
+                              "review",
+                              "failed",
+                              "stale",
+                              "approved"
+                            ]
+                          },
+                          "failure": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "provider_configuration",
+                                  "provider_unavailable",
+                                  "provider_rejected",
+                                  "provider_response",
+                                  "model_output_invalid",
+                                  "structure_invalid",
+                                  "budget_exhausted",
+                                  "cost_overrun",
+                                  "lease_expired",
+                                  "internal"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "error": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "findings": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "unitId",
+                          "locale",
+                          "status",
+                          "failure",
+                          "error",
+                          "findings"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "total",
+                    "counts",
+                    "locales",
+                    "attention"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/summary": {
+      "get": {
+        "operationId": "summary",
+        "summary": "Counts per locale",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sourceUnits": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "languages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "locale": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "approved": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "review": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "working": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "awaiting": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "failed": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "untranslated": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "locale",
+                          "total",
+                          "approved",
+                          "review",
+                          "working",
+                          "awaiting",
+                          "failed",
+                          "untranslated"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "sourceUnits",
+                    "languages"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/jobs/{id}": {
+      "get": {
+        "operationId": "getJob",
+        "summary": "One translation",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationWithPolicy"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "editJob",
+        "summary": "Replace the candidate with wording from a person",
+        "description": "Fails with `revision_conflict` when the translation changed since `revision` was read.\n\nAccess: A credential with the `review` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "translation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100000
+                  }
+                },
+                "required": [
+                  "revision",
+                  "translation"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Translation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/jobs/{id}/validation": {
+      "get": {
+        "operationId": "validateJob",
+        "summary": "Structural checks of the current candidate",
+        "description": "Access: A credential with the `read` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "findings": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Finding"
+                      }
+                    }
+                  },
+                  "required": [
+                    "findings"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/jobs/{id}/approve": {
+      "post": {
+        "operationId": "approveJob",
+        "summary": "Approve one candidate at the revision the reviewer saw",
+        "description": "Access: A credential with the `approve` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "overrideReason": {
+                    "description": "Required to approve over major findings",
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "revision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Translation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/approve": {
+      "post": {
+        "operationId": "approveBatch",
+        "summary": "Approve several candidates at once, all or none",
+        "description": "Access: A credential with the `approve` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "entries": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "entries"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "approved": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "approved"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/jobs/{id}/retry": {
+      "post": {
+        "operationId": "retryJob",
+        "summary": "Queue a failed translation again",
+        "description": "Access: A credential with the `translate` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/translations": {
+      "post": {
+        "operationId": "importTranslations",
+        "summary": "Bring existing translations in as candidates",
+        "description": "Each entry follows its message policy as an edit would. Rejected entries are listed with the reason.\n\nAccess: A credential with the `import` scope.",
+        "tags": [
+          "Translations"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "locale": {
+                    "type": "string"
+                  },
+                  "entries": {
+                    "minItems": 1,
+                    "maxItems": 5000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "unitId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "translation": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100000
+                        }
+                      },
+                      "required": [
+                        "unitId",
+                        "translation"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "locale",
+                  "entries"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "imported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "unchanged": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "rejected": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "unitId": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "unitId",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "imported",
+                    "unchanged",
+                    "rejected"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/bundle": {
+      "get": {
+        "operationId": "exportBundle",
+        "summary": "Approved catalogs of every locale, as one verified bundle",
+        "description": "`everylocale pull` builds a release from this. Locales named in `complete` must be fully approved; others may be partial.\n\nAccess: A credential with the `export` scope.",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "complete",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated locales that must be complete; every target by default",
+            "schema": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogBundle"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/exports/{locale}": {
+      "get": {
+        "operationId": "exportCatalog",
+        "summary": "Approved catalog of one locale",
+        "description": "Access: A credential with the `export` scope.",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "description": "`true` fails unless every message has an approval for the current source",
+            "schema": {
+              "default": "false",
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedCatalog"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "snapshotCatalog",
+        "summary": "Record the current approved catalog of one locale as a release artifact",
+        "description": "Access: A credential with the `export` scope.",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedCatalog"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/rollback": {
+      "post": {
+        "operationId": "rollback",
+        "summary": "Publish an earlier artifact of one locale again",
+        "description": "Access: A credential with the `approve` scope.",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "locale": {
+                    "type": "string"
+                  },
+                  "artifactId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "locale",
+                  "artifactId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project}/artifacts": {
+      "get": {
+        "operationId": "listArtifacts",
+        "summary": "Recorded release artifacts, newest first",
+        "description": "Access: A credential with the `export` scope.",
+        "tags": [
+          "Releases"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "description": "Project id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "locale": {
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "locale",
+                      "created_at"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "operationId": "openApi",
+        "summary": "This API as an OpenAPI 3.1 document",
+        "description": "Access: No credentials.",
+        "tags": [
+          "Service"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error, with a stable code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Stable machine-readable code, such as `validation`."
+              },
+              "message": {
+                "type": "string"
+              },
+              "fields": {
+                "description": "Invalid request fields, for `validation`.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "requestId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "Locale": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "live",
+              "draft"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "ltr",
+              "rtl"
+            ]
+          },
+          "flag": {
+            "description": "Lower-case ISO country code of a flag, when one fits",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "label",
+          "prefix",
+          "direction",
+          "flag"
+        ],
+        "additionalProperties": false
+      },
+      "Ok": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": false
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,79}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "sourceLocale": {
+            "default": "en",
+            "type": "string"
+          },
+          "targetLocales": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 40
+            }
+          },
+          "budgetUsd": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "policies": {
+            "default": [
+              {
+                "match": {},
+                "translate": "ai",
+                "approve": "human"
+              }
+            ],
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "match": {
+                  "default": {},
+                  "type": "object",
+                  "properties": {
+                    "namespace": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240,
+                      "pattern": "^[\\w.:/*-]+$"
+                    },
+                    "key": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 240,
+                      "pattern": "^[\\w.:/*-]+$"
+                    },
+                    "tag": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "translate": {
+                  "default": "ai",
+                  "type": "string",
+                  "enum": [
+                    "ai",
+                    "human"
+                  ]
+                },
+                "approve": {
+                  "default": "human",
+                  "type": "string",
+                  "enum": [
+                    "automatic",
+                    "human"
+                  ]
+                }
+              },
+              "required": [
+                "match",
+                "translate",
+                "approve"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "locked": {
+            "default": [],
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "pattern": "^[\\w.:/*-]+$"
+            }
+          },
+          "glossary": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "targets": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "keep": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "source",
+                "targets"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "instructions": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          },
+          "reviewerLanguage": {
+            "default": "en",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 40
+          },
+          "locales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Locale"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sourceLocale",
+          "targetLocales",
+          "budgetUsd",
+          "policies",
+          "locked",
+          "glossary",
+          "instructions",
+          "reviewerLanguage",
+          "locales"
+        ],
+        "additionalProperties": false
+      },
+      "Translation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "unitId": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "sourceHash": {
+            "type": "string"
+          },
+          "contextHash": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceUnit"
+          },
+          "translation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "awaiting",
+              "review",
+              "failed",
+              "stale",
+              "approved"
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            }
+          },
+          "reviewSummary": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costUsd": {
+            "type": "number"
+          },
+          "approvalRevision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "provider_configuration",
+                  "provider_unavailable",
+                  "provider_rejected",
+                  "provider_response",
+                  "model_output_invalid",
+                  "structure_invalid",
+                  "budget_exhausted",
+                  "cost_overrun",
+                  "lease_expired",
+                  "internal"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "unitId",
+          "locale",
+          "sourceHash",
+          "contextHash",
+          "source",
+          "translation",
+          "revision",
+          "status",
+          "findings",
+          "reviewSummary",
+          "attempts",
+          "error",
+          "costUsd",
+          "approvalRevision",
+          "failure"
+        ],
+        "additionalProperties": false
+      },
+      "SourceUnit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20000
+          },
+          "sourceLocale": {
+            "default": "en",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 40
+          },
+          "kind": {
+            "default": "text",
+            "type": "string",
+            "enum": [
+              "text",
+              "icu",
+              "html",
+              "markdown"
+            ]
+          },
+          "context": {
+            "default": "",
+            "type": "string",
+            "maxLength": 4000
+          },
+          "protectedTerms": {
+            "default": [],
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          },
+          "tags": {
+            "default": [],
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "sourceLocale",
+          "kind",
+          "context",
+          "protectedTerms",
+          "tags"
+        ],
+        "additionalProperties": false
+      },
+      "Finding": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "major",
+              "minor"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "severity",
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "TranslationWithPolicy": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "unitId": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "sourceHash": {
+            "type": "string"
+          },
+          "contextHash": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceUnit"
+          },
+          "translation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "awaiting",
+              "review",
+              "failed",
+              "stale",
+              "approved"
+            ]
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            }
+          },
+          "reviewSummary": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costUsd": {
+            "type": "number"
+          },
+          "approvalRevision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "provider_configuration",
+                  "provider_unavailable",
+                  "provider_rejected",
+                  "provider_response",
+                  "model_output_invalid",
+                  "structure_invalid",
+                  "budget_exhausted",
+                  "cost_overrun",
+                  "lease_expired",
+                  "internal"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "unitId",
+          "locale",
+          "sourceHash",
+          "contextHash",
+          "source",
+          "translation",
+          "revision",
+          "status",
+          "findings",
+          "reviewSummary",
+          "attempts",
+          "error",
+          "costUsd",
+          "approvalRevision",
+          "failure",
+          "policy"
+        ],
+        "additionalProperties": false
+      },
+      "Policy": {
+        "type": "object",
+        "properties": {
+          "match": {
+            "default": {},
+            "type": "object",
+            "properties": {
+              "namespace": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240,
+                "pattern": "^[\\w.:/*-]+$"
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240,
+                "pattern": "^[\\w.:/*-]+$"
+              },
+              "tag": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            },
+            "additionalProperties": false
+          },
+          "translate": {
+            "default": "ai",
+            "type": "string",
+            "enum": [
+              "ai",
+              "human"
+            ]
+          },
+          "approve": {
+            "default": "human",
+            "type": "string",
+            "enum": [
+              "automatic",
+              "human"
+            ]
+          }
+        },
+        "required": [
+          "match",
+          "translate",
+          "approve"
+        ],
+        "additionalProperties": false
+      },
+      "CatalogBundle": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "catalogs": {
+            "minItems": 1,
+            "maxItems": 101,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "schemaVersion": {
+                  "type": "number",
+                  "const": 1
+                },
+                "projectId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "locale": {
+                  "type": "string",
+                  "minLength": 2
+                },
+                "sourceLocale": {
+                  "default": "en",
+                  "type": "string",
+                  "minLength": 2
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "messages": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "sources": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              },
+              "required": [
+                "schemaVersion",
+                "projectId",
+                "locale",
+                "sourceLocale",
+                "revision",
+                "messages",
+                "sources"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "projectId",
+          "revision",
+          "catalogs"
+        ],
+        "additionalProperties": false
+      },
+      "ApprovedCatalog": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "locale": {
+            "type": "string",
+            "minLength": 2
+          },
+          "sourceLocale": {
+            "default": "en",
+            "type": "string",
+            "minLength": 2
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "messages": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "projectId",
+          "locale",
+          "sourceLocale",
+          "revision",
+          "messages",
+          "sources"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Owner token or project token"
+      },
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "el_session"
+      }
+    }
+  }
+}
