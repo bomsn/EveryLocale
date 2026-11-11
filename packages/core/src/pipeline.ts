@@ -3,7 +3,7 @@ import { reviewSchema, type Finding, type Project, type SourceUnit } from './typ
 import { modelCall, ProviderError, reservation, type ProviderConfig } from './provider.js';
 import { validateTranslation } from './validation.js';
 import { parse, TYPE, type MessageFormatElement } from '@formatjs/icu-messageformat-parser';
-import { localeTraits } from './locales.js';
+import { localeTraits, pluralCategories } from './locales.js';
 
 /** Generation gets one correction attempt after a structural validation failure. */
 const GENERATION_ATTEMPTS = 2;
@@ -51,8 +51,7 @@ export function translationPayload(project: Project, unit: SourceUnit, locale: s
         if (node.type === TYPE.plural)
           pluralRequirements.push({
             argument: node.value,
-            categories: new Intl.PluralRules(locale, { type: node.pluralType }).resolvedOptions()
-              .pluralCategories,
+            categories: pluralCategories(locale, node.pluralType),
             type: node.pluralType ?? 'cardinal',
           });
         for (const option of Object.values(node.options)) walk(option.value);

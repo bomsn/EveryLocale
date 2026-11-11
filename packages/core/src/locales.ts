@@ -20,6 +20,22 @@ export type LocaleTraits = {
   region: string | undefined;
   direction: 'ltr' | 'rtl';
 };
+const PLURAL_ORDER: readonly Intl.LDMLPluralRule[] = ['zero', 'one', 'two', 'few', 'many', 'other'];
+
+/**
+ * CLDR plural categories of a locale in canonical order. JavaScript engines return them in
+ * different orders across versions, and releases record them, so the order must not depend on
+ * the Node.js version that pulled or checks a release.
+ */
+export function pluralCategories(
+  locale: string,
+  type: Intl.PluralRuleType = 'cardinal',
+): Intl.LDMLPluralRule[] {
+  return [...new Intl.PluralRules(locale, { type }).resolvedOptions().pluralCategories].sort(
+    (a, b) => PLURAL_ORDER.indexOf(a) - PLURAL_ORDER.indexOf(b),
+  );
+}
+
 /** Script, region and direction come from CLDR likely subtags, never from string prefixes. */
 export function localeTraits(id: string): LocaleTraits {
   const locale = new Intl.Locale(id);

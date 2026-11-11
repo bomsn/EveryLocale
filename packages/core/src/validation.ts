@@ -1,7 +1,7 @@
 import { parse, TYPE, type MessageFormatElement } from '@formatjs/icu-messageformat-parser';
 import * as OpenCCModule from 'opencc-js';
 import type { Finding, SourceUnit, GlossaryEntry } from './types.js';
-import { localeTraits } from './locales.js';
+import { localeTraits, pluralCategories } from './locales.js';
 type Dictionary = string | readonly (readonly [string, string])[];
 type OpenCC = {
   Converter(options: { from: string; to: string }): (text: string) => string;
@@ -58,9 +58,7 @@ function checkPlural(nodes: MessageFormatElement[], locale: string, findings: Fi
     if (node.type === TYPE.tag) checkPlural(node.children, locale, findings);
     if (node.type === TYPE.select || node.type === TYPE.plural) {
       if (node.type === TYPE.plural) {
-        for (const category of new Intl.PluralRules(locale, {
-          type: node.pluralType,
-        }).resolvedOptions().pluralCategories) {
+        for (const category of pluralCategories(locale, node.pluralType)) {
           if (!node.options[category])
             findings.push({
               severity: 'critical',

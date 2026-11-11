@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { sourceHash, validateTranslation } from '@everylocale/core';
+import { pluralCategories, sourceHash, validateTranslation } from '@everylocale/core';
 import { loadRelease, ReleaseError, type Release } from '@everylocale/runtime/server';
 import type { Workspace } from '../project.js';
 import { extractSources } from '../release.js';
@@ -151,11 +151,16 @@ export async function check(
     }
     const pinned = manifest.plurals[definition.id];
     const running = {
-      cardinal: new Intl.PluralRules(definition.id).resolvedOptions().pluralCategories,
-      ordinal: new Intl.PluralRules(definition.id, { type: 'ordinal' }).resolvedOptions()
-        .pluralCategories,
+      cardinal: pluralCategories(definition.id),
+      ordinal: pluralCategories(definition.id, 'ordinal'),
     };
-    if (pinned && JSON.stringify(pinned) !== JSON.stringify(running))
+    // Compared as sets: a release pulled by an older Node.js may list them in another order.
+    const same = (a: readonly string[], b: readonly string[]) =>
+      a.length === b.length && a.every((category) => b.includes(category));
+    if (
+      pinned &&
+      !(same(pinned.cardinal, running.cardinal) && same(pinned.ordinal, running.ordinal))
+    )
       problems.push({
         code: 'plural_rules_changed',
         locale: definition.id,

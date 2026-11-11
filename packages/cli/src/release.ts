@@ -5,6 +5,7 @@ import type { MessageFormatElement } from '@formatjs/icu-messageformat-parser';
 import {
   catalogBundleSchema,
   compileMessage,
+  pluralCategories,
   sourceHash,
   type ApprovedCatalog,
   type CatalogBundle,
@@ -118,9 +119,8 @@ export async function writeRelease(
     [config.sourceLocale, ...locales.map((item) => item.id)].map((locale) => [
       locale,
       {
-        cardinal: new Intl.PluralRules(locale).resolvedOptions().pluralCategories,
-        ordinal: new Intl.PluralRules(locale, { type: 'ordinal' }).resolvedOptions()
-          .pluralCategories,
+        cardinal: pluralCategories(locale),
+        ordinal: pluralCategories(locale, 'ordinal'),
       },
     ]),
   );

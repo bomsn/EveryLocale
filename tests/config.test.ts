@@ -6,6 +6,7 @@ import {
   defineLocales,
   ConfigError,
   unknownFormats,
+  pluralCategories,
 } from '../packages/core/dist/index.js';
 import { CONFIG_SCHEMA_PATH, configSchemaText } from '../tools/config-schema.js';
 
@@ -91,4 +92,12 @@ test('the committed JSON Schema matches the config definition', async () => {
     configSchemaText(),
     'Run pnpm codegen and commit the schema',
   );
+});
+
+test('plural categories come in CLDR order whatever order the JavaScript engine reports', () => {
+  // Node.js 22 reports French as many, one, other; releases must not depend on that.
+  assert.deepEqual(pluralCategories('fr'), ['one', 'many', 'other']);
+  assert.deepEqual(pluralCategories('ar'), ['zero', 'one', 'two', 'few', 'many', 'other']);
+  assert.deepEqual(pluralCategories('zh-TW'), ['other']);
+  assert.deepEqual(pluralCategories('en', 'ordinal'), ['one', 'two', 'few', 'other']);
 });
