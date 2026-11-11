@@ -32,7 +32,10 @@ export default tseslint.config(
     rules: {
       // Template literals interpolate numbers and URLs deliberately in messages and paths.
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
       // `() => assert.throws(...)` and `() => store.close()` are the idiomatic callback forms.
       '@typescript-eslint/no-confusing-void-expression': ['error', { ignoreArrowShorthand: true }],
       '@typescript-eslint/no-floating-promises': [

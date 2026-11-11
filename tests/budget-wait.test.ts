@@ -13,7 +13,7 @@ test('temporary reservations leave jobs pending and do not starve another projec
           name: id,
           targetLocales: ['de'],
           budgetUsd: 1,
-          approvalMode: 'automatic',
+          policies: [{ match: {}, approve: 'automatic' }],
         }),
       );
     store.importSources('alpha', [unitSchema.parse({ id: 'first', source: 'Hello' })]);

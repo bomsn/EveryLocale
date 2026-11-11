@@ -79,10 +79,26 @@ const names = new Proxy(
 const statuses = {
   pending: 'Queued',
   running: 'Translating',
+  awaiting: 'Needs a translator',
   review: 'Needs review',
   failed: 'Failed',
   stale: 'Source changed',
   approved: 'Approved',
+};
+/** The last rule matches every message; it is the project's default. */
+const defaultRule = (project) => project?.policies?.at(-1);
+const describeRule = (rule) => {
+  const scope = [
+    rule.match.namespace && 'namespace ' + rule.match.namespace,
+    rule.match.key && 'key ' + rule.match.key,
+    rule.match.tag && 'tag ' + rule.match.tag,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const who = rule.translate === 'human' ? 'a person translates' : 'AI translates';
+  const approval =
+    rule.approve === 'automatic' ? 'clean work approves automatically' : 'a person approves';
+  return (scope || 'Every other message') + ': ' + who + ', ' + approval + '.';
 };
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -144,7 +160,7 @@ async function api(path, method = 'GET', body) {
       sourceLocale: 'original language',
       targetLocales: 'target languages',
       budgetUsd: 'translation budget',
-      approvalMode: 'approval mode',
+      policies: 'approval rules',
       glossary: 'terminology',
       instructions: 'language guidance',
     };
@@ -394,7 +410,7 @@ function renderOverview() {
   );
   const policy = $('#approval-policy');
   policy.hidden = !state.project;
-  const automatic = state.project?.approvalMode === 'automatic';
+  const automatic = defaultRule(state.project)?.approve === 'automatic';
   const policyCopy = element('div');
   policyCopy.append(
     element('strong', automatic ? 'Automatic approval is on' : 'Human review gate is on'),
@@ -405,6 +421,12 @@ function renderOverview() {
         : 'AI prepares and checks each translation. You approve the exact wording before it reaches an export.',
     ),
   );
+  const specific = state.project?.policies?.slice(0, -1) ?? [];
+  if (specific.length) {
+    const rules = element('ul', undefined, 'policy-rules');
+    for (const rule of specific) rules.append(element('li', describeRule(rule)));
+    policyCopy.append(element('p', 'These rules apply first, in order:'), rules);
+  }
   policy.replaceChildren(icon(automatic ? 'refresh' : 'shield'), policyCopy);
   const operations = $('#operations-notice');
   const service = state.operations?.projects.find((project) => project.id === state.project?.id);
@@ -796,16 +818,7 @@ function renderDetail() {
     );
     actions.append(retry);
   }
-  body.append(
-    actions,
-    element(
-      'p',
-      state.project.approvalMode === 'automatic'
-        ? 'Automatic approval accepts clean AI-reviewed revisions. Flagged wording still needs attention.'
-        : 'Human approval is required for this project. AI prepares the translation and review findings.',
-      'approval-note',
-    ),
-  );
+  body.append(actions, element('p', describeRule(job.policy), 'approval-note'));
   findings.after(actions);
   const metadata = element('details');
   metadata.append(
@@ -1285,7 +1298,7 @@ async function projectDialog(edit) {
   );
   $('#source-locale').value = source;
   document.querySelector(
-    `[name="approval-mode"][value="${edit ? (state.project.approvalMode ?? 'human') : 'automatic'}"]`,
+    `[name="approval-mode"][value="${edit ? (defaultRule(state.project)?.approve ?? 'human') : 'automatic'}"]`,
   ).checked = true;
   $('#project-dialog h2').textContent = edit ? 'Project settings' : 'Create a project';
   $('#project-form button[type="submit"]').textContent = edit ? 'Save settings' : 'Create project';
@@ -1337,7 +1350,16 @@ $('#project-form').addEventListener('submit', (event) => {
   guarded(async () => {
     const id = $('#project-id').value;
     const creating = $('#project-form').dataset.mode === 'create';
+    const existing = creating ? null : state.project;
+    const approve = document.querySelector('[name="approval-mode"]:checked').value;
     state.project = await api(`/projects/${encodeURIComponent(id)}`, 'PUT', {
+      // Settings this form does not edit are kept exactly as they are.
+      locked: existing?.locked ?? [],
+      reviewerLanguage: existing?.reviewerLanguage ?? 'en',
+      policies: [
+        ...(existing?.policies.slice(0, -1) ?? []),
+        { match: {}, translate: defaultRule(existing)?.translate ?? 'ai', approve },
+      ],
       name: $('#project-name').value,
       sourceLocale: $('#source-locale').value,
       targetLocales: [
@@ -1353,7 +1375,6 @@ $('#project-form').addEventListener('submit', (event) => {
         ),
       ],
       budgetUsd: Number($('#project-budget').value),
-      approvalMode: document.querySelector('[name="approval-mode"]:checked').value,
       glossary: [...$('#glossary-fields').children].map((row) => ({
         source: row.querySelector('[data-term-source]').value,
         keep: row.querySelector('[data-term-keep]').checked,
@@ -1564,7 +1585,13 @@ async function loadTokens() {
     row.append(
       element(
         'p',
-        `${token.scopes.join(', ')} | Expires ${new Date(token.expires_at).toLocaleDateString()}${token.revoked ? ' | Revoked' : ''}`,
+        [
+          token.scopes.join(', '),
+          token.locales ? 'Languages ' + token.locales.join(', ') : 'All languages',
+          token.namespaces ? 'Namespaces ' + token.namespaces.join(', ') : 'All namespaces',
+          'Expires ' + new Date(token.expires_at).toLocaleDateString(),
+          ...(token.revoked ? ['Revoked'] : []),
+        ].join(' | '),
       ),
     );
     if (!token.revoked) {
@@ -1603,6 +1630,16 @@ $('#tokens').addEventListener('click', () =>
       label.append(checkbox, document.createTextNode(descriptions[scope]));
       $('#token-scopes').append(label);
     }
+    $('#token-locales').replaceChildren();
+    for (const locale of state.project.targetLocales) {
+      const label = element('label'),
+        checkbox = element('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = locale;
+      label.append(checkbox, nativeLanguage(locale, 'span'));
+      $('#token-locales').append(label);
+    }
+    $('#token-namespaces').value = '';
     await loadTokens();
     $('#tokens-dialog').showModal();
   }),
@@ -1613,9 +1650,18 @@ $('#token-form').addEventListener('submit', (event) => {
     const scopes = [...$('#token-scopes').querySelectorAll('input:checked')].map(
       (input) => input.value,
     );
+    const locales = [...$('#token-locales').querySelectorAll('input:checked')].map(
+      (input) => input.value,
+    );
+    const namespaces = $('#token-namespaces')
+      .value.split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
     const result = await api(path('/tokens'), 'POST', {
       scopes,
       expiresAt: Date.now() + Number($('#token-days').value) * 86400000,
+      ...(locales.length ? { locales } : {}),
+      ...(namespaces.length ? { namespaces } : {}),
     });
     $('#token-value').value = result.token;
     $('#new-token').hidden = false;

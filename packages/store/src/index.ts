@@ -8,7 +8,8 @@ import type {
   SourceUnit,
   TranslationRecord,
 } from '@everylocale/core';
-import { SCHEMA } from './schema.js';
+import { migrate, schemaVersion, type MigrationResult } from './migrations.js';
+export { SCHEMA_VERSION, type MigrationResult } from './migrations.js';
 import type { JobRow, SourceRow } from './rows.js';
 import * as projects from './projects.js';
 import * as sources from './sources.js';
@@ -16,7 +17,13 @@ import * as jobs from './jobs.js';
 import * as approvals from './approvals.js';
 import * as releases from './releases.js';
 import * as access from './access.js';
+import * as sessions from './sessions.js';
+export type { Session } from './sessions.js';
 import type { Scope } from './decode.js';
+import type { ImportResult } from './approvals.js';
+import type { TokenIdentity, TokenLimits } from './access.js';
+export { withinLimits, type TokenIdentity, type TokenLimits } from './access.js';
+export type { ImportResult } from './approvals.js';
 import { deliveryMethods, type DeliveryStore } from './operations.js';
 export type { DeliveryStore, DeliveryEvent, Operations } from './operations.js';
 
@@ -25,6 +32,8 @@ export type JobFilters = {
   status?: TranslationRecord['status'];
   search?: string;
   current?: boolean;
+  /** Only jobs a limited token may see. */
+  within?: TokenLimits;
 };
 export type ProjectSummary = {
   sourceUnits: number;
@@ -34,6 +43,8 @@ export type ProjectSummary = {
     approved: number;
     review: number;
     working: number;
+    /** Waiting for a person because the policy keeps the text away from models. */
+    awaiting: number;
     failed: number;
     untranslated: number;
   }>;
@@ -138,6 +149,12 @@ export interface LocalizationStore extends TranslationStore, DeliveryStore {
   ): { records: TranslationRecord[]; cursor: number | null };
   summary(project: string): ProjectSummary;
   edit(project: string, id: string, revision: number, translation: string, actor: string): void;
+  importTranslations(
+    project: string,
+    locale: string,
+    entries: ReadonlyArray<{ unitId: string; translation: string }>,
+    actor: string,
+  ): ImportResult;
   approveBatch(
     project: string,
     entries: Array<{ id: string; revision: number }>,
@@ -150,17 +167,28 @@ export interface LocalizationStore extends TranslationStore, DeliveryStore {
     project: string,
     scopes: Scope[],
     expiresAt: number,
+    limits?: Partial<TokenLimits>,
+    actor?: string,
   ): { id: string; token: string; expiresAt: number };
-  authenticate(token: string): { projectId: string; scopes: Scope[]; actor: string } | null;
-  authenticateId(id: string): { projectId: string; scopes: Scope[]; actor: string } | null;
-  tokens(project: string): Array<{
-    id: string;
-    scopes: Scope[];
-    created_at: number;
-    expires_at: number;
-    revoked: number;
-  }>;
+  authenticate(token: string): TokenIdentity | null;
+  authenticateId(id: string): TokenIdentity | null;
+  tokens(project: string): Array<
+    TokenLimits & {
+      id: string;
+      scopes: Scope[];
+      created_at: number;
+      expires_at: number;
+      revoked: number;
+    }
+  >;
   revokeToken(project: string, id: string, actor: string): void;
+  createSession(
+    tokenId: string | null,
+    ttlMs: number,
+  ): { secret: string; csrf: string; expiresAt: number };
+  session(secret: string): import('./sessions.js').Session | 'expired' | null;
+  revokeSession(secret: string): void;
+  revokeSessions(actor: string): number;
   artifacts(
     project: string,
     locale?: string,
@@ -186,6 +214,8 @@ export class SqliteStore implements LocalizationStore {
   readonly deliveryEvents = (project?: string) => deliveryMethods.events(this.db, project);
   readonly backup = (path: string) => deliveryMethods.backup(this.db, path);
   readonly db: Database.Database;
+  /** The schema upgrade this process applied on open, including the pre-upgrade backup path. */
+  readonly migration: MigrationResult;
   constructor(
     path: string,
     /** @internal */
@@ -193,11 +223,15 @@ export class SqliteStore implements LocalizationStore {
   ) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new Database(path, { timeout: 5000 });
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
-    const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 3) throw new Error('Database schema is newer than this service');
-    this.db.exec(SCHEMA);
+    try {
+      schemaVersion(this.db);
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('foreign_keys = ON');
+      this.migration = migrate(this.db, path, now());
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
   close() {
     this.db.close();
@@ -326,6 +360,18 @@ export class SqliteStore implements LocalizationStore {
   approve(projectId: string, id: string, revision: number, actor: string, overrideReason?: string) {
     approvals.approve(this, projectId, id, revision, actor, overrideReason);
   }
+  importTranslations(
+    projectId: string,
+    locale: string,
+    entries: ReadonlyArray<{ unitId: string; translation: string }>,
+    actor: string,
+  ): ImportResult {
+    return approvals.importTranslations(this, projectId, locale, entries, actor);
+  }
+  /** @internal */
+  jobFor(project: Project, unitId: string, locale: string): TranslationRecord {
+    return jobs.jobFor(this, project, unitId, locale);
+  }
   approveBatch(projectId: string, entries: Array<{ id: string; revision: number }>, actor: string) {
     approvals.approveBatch(this, projectId, entries, actor);
   }
@@ -347,13 +393,19 @@ export class SqliteStore implements LocalizationStore {
   rollback(projectId: string, locale: string, artifactId: string, actor: string) {
     releases.rollback(this, projectId, locale, artifactId, actor);
   }
-  mintToken(projectId: string, scopes: Scope[], expiresAt: number) {
-    return access.mintToken(this, projectId, scopes, expiresAt);
+  mintToken(
+    projectId: string,
+    scopes: Scope[],
+    expiresAt: number,
+    limits?: Partial<TokenLimits>,
+    actor?: string,
+  ) {
+    return access.mintToken(this, projectId, scopes, expiresAt, limits, actor);
   }
-  authenticate(token: string): { projectId: string; scopes: Scope[]; actor: string } | null {
+  authenticate(token: string): TokenIdentity | null {
     return access.authenticate(this, token);
   }
-  authenticateId(id: string): { projectId: string; scopes: Scope[]; actor: string } | null {
+  authenticateId(id: string): TokenIdentity | null {
     return access.authenticateId(this, id);
   }
   documents(projectId: string) {
@@ -370,5 +422,17 @@ export class SqliteStore implements LocalizationStore {
   }
   auditLog(projectId: string) {
     return access.auditLog(this, projectId);
+  }
+  createSession(tokenId: string | null, ttlMs: number) {
+    return sessions.createSession(this, tokenId, ttlMs);
+  }
+  session(secret: string) {
+    return sessions.session(this, secret);
+  }
+  revokeSession(secret: string) {
+    sessions.revokeSession(this, secret);
+  }
+  revokeSessions(actor: string) {
+    return sessions.revokeSessions(this, actor);
   }
 }

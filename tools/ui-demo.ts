@@ -70,6 +70,8 @@ const app = await createApp(store, {
   publicOrigin: 'http://localhost:4314',
   secureCookie: false,
   providersReady: false,
+  logLevel: 'silent',
+  trustProxy: false,
 });
 await app.listen({ host: '127.0.0.1', port: 4314 });
 console.log('Disposable UI demo listening on localhost:4314.');

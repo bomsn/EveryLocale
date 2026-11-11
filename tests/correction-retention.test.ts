@@ -8,7 +8,7 @@ test('changed glossary or instructions retain manual wording for new independent
     id: 'example',
     name: 'Example',
     targetLocales: ['de'],
-    approvalMode: 'automatic',
+    policies: [{ match: {}, approve: 'automatic' }],
     budgetUsd: 1,
   });
   try {

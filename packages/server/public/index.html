@@ -323,8 +323,8 @@
             ></label
           >
           <p class="small">
-            Applies to future completed or reused translations. Changing this setting does not
-            approve the existing queue.
+            This is the default rule for messages that no namespace or tag rule covers. It applies
+            to future completed or reused translations and does not approve the existing queue.
           </p>
         </fieldset>
         <label for="project-budget">Total translation budget (USD)</label
@@ -394,6 +394,20 @@
           <legend>Permissions</legend>
           <div id="token-scopes" class="scope-list"></div>
         </fieldset>
+        <fieldset>
+          <legend>Languages</legend>
+          <p class="small" id="token-locales-hint">Leave all unchecked to allow every language.</p>
+          <div id="token-locales" class="scope-list" aria-describedby="token-locales-hint"></div>
+        </fieldset>
+        <label for="token-namespaces">Namespaces (optional)</label
+        ><input
+          id="token-namespaces"
+          aria-describedby="token-namespaces-hint"
+          placeholder="legal, help/*"
+        />
+        <p class="small" id="token-namespaces-hint">
+          Comma-separated. Use * within a segment and ** across segments.
+        </p>
         <label for="token-days">Expires after (days)</label
         ><input id="token-days" type="number" min="1" max="365" value="30" required /><button
           type="submit"

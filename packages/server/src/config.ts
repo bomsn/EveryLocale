@@ -1,6 +1,7 @@
 import { databasePath } from './paths.js';
 import { validateProvider, type ProviderConfig } from '@everylocale/core';
 import type { WorkerConfig } from './worker.js';
+import { LOG_LEVELS, type LogLevel } from './http/context.js';
 import { validateDelivery } from './delivery.js';
 import { ChatGptConnection } from './chatgpt.js';
 import type { SqliteStore } from '@everylocale/store';
@@ -59,6 +60,11 @@ export function loadConfig(store?: SqliteStore) {
     : null;
   if (delivery) validateDelivery(delivery);
   const host = process.env.EVERYLOCALE_HOST ?? '127.0.0.1';
+  const logLevel = process.env.EVERYLOCALE_LOG_LEVEL ?? 'info';
+  if (!(LOG_LEVELS as readonly string[]).includes(logLevel))
+    throw new Error(`EVERYLOCALE_LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}`);
+  // Behind a reverse proxy, only the listed proxies may supply the client address.
+  const trustProxy: string | false = process.env.EVERYLOCALE_TRUST_PROXY?.trim() || false;
   const concurrency = Number(process.env.EVERYLOCALE_CONCURRENCY ?? 2);
   const intervalMs = Number(process.env.EVERYLOCALE_PROVIDER_INTERVAL_MS ?? 500);
   if (
@@ -97,6 +103,8 @@ export function loadConfig(store?: SqliteStore) {
     sessionSecret,
     database: databasePath(),
     publicOrigin: origin.origin,
+    logLevel: logLevel as LogLevel,
+    trustProxy,
     secureCookie: origin.protocol === 'https:',
     worker:
       generator && reviewer

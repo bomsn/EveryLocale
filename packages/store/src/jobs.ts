@@ -5,7 +5,11 @@ import {
   hash,
   validateTranslation,
   PIPELINE_REVISION,
+  policyFor,
+  isLocked,
 } from '@everylocale/core';
+import { AI_REVIEW_SUMMARY, HUMAN_SUMMARY } from './approvals.js';
+import { withinLimits } from './access.js';
 import type { Finding, Project, SourceUnit, TranslationRecord } from '@everylocale/core';
 import { decodeStrings, decodeUnit } from './decode.js';
 import { record, memoryHash } from './rows.js';
@@ -28,6 +32,111 @@ export function stale(store: SqliteStore, job: JobRow) {
   store.db
     .prepare("UPDATE jobs SET status='stale',lease_token=NULL,lease_until=NULL WHERE id=?")
     .run(job.id);
+}
+
+const LOCKED_SUMMARY = 'Locked key: the source text is used in every locale.';
+
+/**
+ * Returns the job for a message's current source and translation context, creating it when
+ * needed. A new job starts from what is already known, in this order: the locked source text,
+ * a person's earlier correction, then translation memory (AI policies only). Otherwise it waits
+ * for the model, or for a person when the policy keeps the text away from models.
+ */
+export function jobFor(
+  store: SqliteStore,
+  project: Project,
+  unitId: string,
+  locale: string,
+): TranslationRecord {
+  const row = store.source(project.id, unitId);
+  const source = decodeUnit(row.data);
+  const context = contextHash(project, source, locale);
+  const human = policyFor(project, source).translate === 'human';
+  const memory = human
+    ? undefined
+    : (store.db
+        .prepare(
+          'SELECT translation,findings,review_summary FROM translation_memory WHERE project_id=? AND cache_key=?',
+        )
+        .get(project.id, memoryHash(project, source, locale)) as
+        | { translation: string; findings: string; review_summary: string }
+        | undefined);
+  const cached = store.db
+    .prepare(
+      'SELECT id,status,translation FROM jobs WHERE project_id=? AND unit_id=? AND locale=? AND context_hash=?',
+    )
+    .get(project.id, unitId, locale, context) as
+    | { id: string; status: string; translation: string | null }
+    | undefined;
+  if (cached) {
+    // Returning to an earlier source reuses its wording with a fresh revision approval.
+    if (cached.status === 'stale') {
+      const reusable =
+        cached.translation !== null && (human || memory?.translation === cached.translation);
+      store.db
+        .prepare(
+          'UPDATE jobs SET status=?,revision=revision+1,available_at=?,attempts=0,error=NULL WHERE id=?',
+        )
+        .run(reusable ? 'review' : human ? 'awaiting' : 'pending', store.now(), cached.id);
+      store.approveAutomatically(project, cached.id);
+    }
+    return store.getJob(project.id, cached.id);
+  }
+  const id = randomUUID();
+  store.db
+    .prepare(
+      'INSERT INTO jobs(id,project_id,unit_id,locale,source_hash,context_hash,source_data,status,available_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
+    )
+    .run(
+      id,
+      project.id,
+      unitId,
+      locale,
+      row.source_hash,
+      context,
+      row.data,
+      human ? 'awaiting' : 'pending',
+      store.now(),
+      store.now(),
+    );
+  const start = (
+    status: string,
+    operation: string,
+    translation: string,
+    findings: string,
+    summary: string,
+  ) =>
+    store.db
+      .prepare(
+        'UPDATE jobs SET status=?,operation=?,translation=?,findings=?,review_summary=?,revision=1 WHERE id=?',
+      )
+      .run(status, operation, translation, findings, summary, id);
+  if (isLocked(project, unitId)) {
+    const findings = validateTranslation(source, source.source, locale, project.glossary);
+    start('review', 'locked', source.source, JSON.stringify(findings), LOCKED_SUMMARY);
+    if (!findings.some((finding) => finding.severity !== 'minor'))
+      store.approve(project.id, id, 1, 'locked-key');
+    return store.getJob(project.id, id);
+  }
+  const correction = store.db
+    .prepare(
+      "SELECT translation FROM jobs WHERE project_id=? AND unit_id=? AND locale=? AND source_hash=? AND operation IN ('review','human') AND translation IS NOT NULL ORDER BY seq DESC LIMIT 1",
+    )
+    .get(project.id, unitId, locale, row.source_hash) as { translation: string } | undefined;
+  // New guidance rechecks a person's wording instead of silently replacing their correction.
+  if (correction && human)
+    start(
+      'review',
+      'human',
+      correction.translation,
+      JSON.stringify(validateTranslation(source, correction.translation, locale, project.glossary)),
+      HUMAN_SUMMARY,
+    );
+  else if (correction) start('pending', 'review', correction.translation, '[]', AI_REVIEW_SUMMARY);
+  else if (memory)
+    start('review', 'generate', memory.translation, memory.findings, memory.review_summary);
+  store.approveAutomatically(project, id);
+  return store.getJob(project.id, id);
 }
 
 export function enqueue(
@@ -57,7 +166,8 @@ export function enqueue(
       glossary: project.glossary,
       instructions: project.instructions,
       pipelineRevision: PIPELINE_REVISION,
-      approvalMode: project.approvalMode,
+      policies: project.policies,
+      locked: project.locked,
     });
     const previous = store.db
       .prepare('SELECT body_hash,job_ids FROM requests WHERE project_id=? AND request_key=?')
@@ -70,83 +180,13 @@ export function enqueue(
         );
       return decodeStrings(previous.job_ids).map((id) => store.getJob(projectId, id));
     }
-    const ids: string[] = [];
-    for (const { id: unitId, row } of units)
-      for (const locale of targets) {
-        const source = decodeUnit(row.data);
-        const context = contextHash(project, source, locale);
-        const cached = store.db
-          .prepare(
-            'SELECT id,status,translation FROM jobs WHERE project_id=? AND unit_id=? AND locale=? AND context_hash=?',
-          )
-          .get(projectId, unitId, locale, context) as
-          | { id: string; status: string; translation: string | null }
-          | undefined;
-        const memory = store.db
-          .prepare(
-            'SELECT translation,findings,review_summary FROM translation_memory WHERE project_id=? AND cache_key=?',
-          )
-          .get(projectId, memoryHash(project, source, locale)) as
-          | { translation: string; findings: string; review_summary: string }
-          | undefined;
-        if (cached) {
-          // Returning to an earlier source reuses its correction with a fresh revision approval.
-          if (cached.status === 'stale') {
-            store.db
-              .prepare(
-                'UPDATE jobs SET status=?,revision=revision+1,available_at=?,attempts=0,error=NULL WHERE id=?',
-              )
-              .run(
-                cached.translation && memory?.translation === cached.translation
-                  ? 'review'
-                  : 'pending',
-                store.now(),
-                cached.id,
-              );
-            store.approveAutomatically(project, cached.id);
-          }
-          ids.push(cached.id);
-          continue;
-        }
-        const id = randomUUID();
-        store.db
-          .prepare(
-            "INSERT INTO jobs(id,project_id,unit_id,locale,source_hash,context_hash,source_data,status,available_at,created_at) VALUES(?,?,?,?,?,?,?,'pending',?,?)",
-          )
-          .run(
-            id,
-            projectId,
-            unitId,
-            locale,
-            row.source_hash,
-            context,
-            row.data,
-            store.now(),
-            store.now(),
-          );
-        const correction = store.db
-          .prepare(
-            "SELECT translation FROM jobs WHERE project_id=? AND unit_id=? AND locale=? AND source_hash=? AND operation='review' AND translation IS NOT NULL ORDER BY seq DESC LIMIT 1",
-          )
-          .get(projectId, unitId, locale, row.source_hash) as { translation: string } | undefined;
-        // New guidance rechecks a person's wording instead of silently replacing their correction.
-        if (correction)
-          store.db
-            .prepare("UPDATE jobs SET operation='review',translation=?,revision=1 WHERE id=?")
-            .run(correction.translation, id);
-        else if (memory)
-          store.db
-            .prepare(
-              "UPDATE jobs SET status='review',translation=?,findings=?,review_summary=?,revision=1 WHERE id=?",
-            )
-            .run(memory.translation, memory.findings, memory.review_summary, id);
-        store.approveAutomatically(project, id);
-        ids.push(id);
-      }
+    const records = units.flatMap(({ id }) =>
+      targets.map((locale) => jobFor(store, project, id, locale)),
+    );
     store.db
       .prepare('INSERT INTO requests(project_id,request_key,body_hash,job_ids) VALUES(?,?,?,?)')
-      .run(projectId, requestKey, bodyHash, JSON.stringify(ids));
-    return ids.map((id) => store.getJob(projectId, id));
+      .run(projectId, requestKey, bodyHash, JSON.stringify(records.map((job) => job.id)));
+    return records.map((job) => store.getJob(projectId, job.id));
   });
 }
 
@@ -182,6 +222,7 @@ export function listJobs(
   const search = filters.search?.toLocaleLowerCase();
   for (const raw of rows) {
     const row = raw as JobRow & { seq: number };
+    if (filters.within && !withinLimits(filters.within, row.locale, row.unit_id)) continue;
     const unit = decodeUnit(row.source_data);
     if (
       sources &&
@@ -228,6 +269,7 @@ export function summary(store: SqliteStore, projectId: string): ProjectSummary {
         approved: 0,
         review: 0,
         working: 0,
+        awaiting: 0,
         failed: 0,
         untranslated: 0,
       };
@@ -239,6 +281,7 @@ export function summary(store: SqliteStore, projectId: string): ProjectSummary {
         else if (job.status === 'approved') counts.approved++;
         else if (job.status === 'review') counts.review++;
         else if (job.status === 'failed') counts.failed++;
+        else if (job.status === 'awaiting') counts.awaiting++;
         else counts.working++;
       }
       return counts;
@@ -305,6 +348,11 @@ export function claim(
         contextHash(project, unit, job.locale) !== job.context_hash
       ) {
         store.stale(job);
+        continue;
+      }
+      // A policy can change after queueing; text under a human policy never reaches a model.
+      if (policyFor(project, unit).translate === 'human') {
+        store.db.prepare("UPDATE jobs SET status='awaiting' WHERE id=?").run(job.id);
         continue;
       }
       const reviewOnly = (job as JobRow & { operation: string }).operation === 'review';
@@ -434,7 +482,7 @@ export function complete(
         );
     store.approveAutomatically(project, id);
     if (
-      project.approvalMode === 'automatic' &&
+      policyFor(project, unit).approve === 'automatic' &&
       unique.some((finding) => finding.severity !== 'minor')
     )
       deliveryMethods.emit(store.db, store.now(), job.project_id, 'alert.review_required', id, {

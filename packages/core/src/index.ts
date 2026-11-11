@@ -1,6 +1,7 @@
 export * from './types.js';
 export * from './bundle.js';
 export * from './hash.js';
+export * from './policy.js';
 export * from './locales.js';
 export * from './validation.js';
 export * from './provider.js';

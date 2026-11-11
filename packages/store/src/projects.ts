@@ -1,5 +1,5 @@
 import type { SqliteStore } from './index.js';
-import { ContractError, contextHash, projectSchema } from '@everylocale/core';
+import { policyFor, ContractError, contextHash, projectSchema } from '@everylocale/core';
 import type { Project } from '@everylocale/core';
 import { decodeSourceLocale, decodeUnit } from './decode.js';
 import type { JobRow } from './rows.js';
@@ -57,12 +57,17 @@ export function saveProject(store: SqliteStore, input: Project, actor = 'owner')
           "SELECT * FROM jobs WHERE project_id=? AND status IN ('pending','running','review','approved')",
         )
         .all(project.id) as JobRow[];
-      for (const job of jobs)
+      for (const job of jobs) {
+        const unit = decodeUnit(job.source_data);
         if (
           !project.targetLocales.includes(job.locale) ||
-          contextHash(project, decodeUnit(job.source_data), job.locale) !== job.context_hash
+          contextHash(project, unit, job.locale) !== job.context_hash
         )
           store.stale(job);
+        // Queued model work stops as soon as a policy keeps the text away from models.
+        else if (job.status === 'pending' && policyFor(project, unit).translate === 'human')
+          store.db.prepare("UPDATE jobs SET status='awaiting' WHERE id=?").run(job.id);
+      }
     }
     store.audit(project.id, actor, 'project.save', project.id);
     return project;

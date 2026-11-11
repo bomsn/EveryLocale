@@ -37,6 +37,8 @@ const tokenSchema = z.object({
   created_at: z.number(),
   expires_at: z.number(),
   revoked: z.number(),
+  locales: z.string().nullable(),
+  namespaces: z.string().nullable(),
 });
 export const tokenRow = (row: unknown) => tokenSchema.parse(row);
 

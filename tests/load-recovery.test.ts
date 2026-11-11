@@ -91,7 +91,7 @@ test('parallel HTTP requests retain project scope, locale ownership and private 
         name: projectId,
         targetLocales: ['ar', 'de'],
         budgetUsd: 1,
-        approvalMode: 'automatic',
+        policies: [{ match: {}, approve: 'automatic' }],
       }),
     );
     store.importSources(projectId, [
@@ -116,6 +116,8 @@ test('parallel HTTP requests retain project scope, locale ownership and private 
     publicOrigin: 'http://localhost:4310',
     secureCookie: false,
     providersReady: false,
+    logLevel: 'silent',
+    trustProxy: false,
   });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const address = app.server.address() as { port: number };

@@ -206,6 +206,8 @@ test('the documented JSON example translates, renders, updates and reuses unchan
     publicOrigin: 'http://localhost:4310',
     secureCookie: false,
     providersReady: true,
+    logLevel: 'silent',
+    trustProxy: false,
   });
   const base = {
     baseUrl: `http://127.0.0.1:${(provider.address() as { port: number }).port}/v1`,
@@ -225,7 +227,7 @@ test('the documented JSON example translates, renders, updates and reuses unchan
         name: 'My first app',
         targetLocales: ['de'],
         budgetUsd: 1,
-        approvalMode: 'automatic',
+        policies: [{ match: {}, approve: 'automatic' }],
       }),
     );
     const token = store.mintToken(

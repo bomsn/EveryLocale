@@ -3,14 +3,17 @@ import assert from 'node:assert/strict';
 import { SqliteStore } from '../packages/store/dist/index.js';
 import { createApp } from '../packages/server/dist/app.js';
 import { projectSchema } from '../packages/core/dist/index.js';
+import type { AppConfig } from '../packages/server/dist/app.js';
 
 const admin = 'test-owner-token-with-at-least-32-characters';
-const config = {
+const config: AppConfig = {
   adminToken: admin,
   sessionSecret: 'independent-test-secret-with-at-least-32-chars',
   publicOrigin: 'http://localhost:4310',
   secureCookie: false,
   providersReady: true,
+  logLevel: 'silent',
+  trustProxy: false,
 };
 test('HTTP authorization isolates projects and enforces individual token scopes', async () => {
   const store = new SqliteStore(':memory:');

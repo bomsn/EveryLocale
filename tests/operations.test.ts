@@ -17,7 +17,7 @@ function prepared(path = ':memory:', now?: () => number) {
       name: 'Example',
       targetLocales: ['de'],
       budgetUsd: 1,
-      approvalMode: 'automatic',
+      policies: [{ match: {}, approve: 'automatic' }],
     }),
   );
   store.importSources('example', [unitSchema.parse({ id: 'welcome', source: 'Welcome' })]);
@@ -162,6 +162,8 @@ test('operations never leak other projects to scoped accounts', async () => {
     publicOrigin: 'http://localhost:4310',
     secureCookie: false,
     providersReady: false,
+    logLevel: 'silent',
+    trustProxy: false,
   });
   const token = store.mintToken('example', ['read'], Date.now() + 60000).token;
   try {

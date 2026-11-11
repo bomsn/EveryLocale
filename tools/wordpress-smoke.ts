@@ -312,7 +312,7 @@ try {
     name: 'Disposable WordPress',
     targetLocales: ['fr'],
     budgetUsd: 1,
-    approvalMode: 'automatic',
+    policies: [{ match: {}, approve: 'automatic' }],
   });
   const automaticSource = Number(
     (

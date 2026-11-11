@@ -17,7 +17,7 @@ test('catalog releases publish together, retain rollback and reject incomplete o
         id: 'example',
         name: 'Example',
         targetLocales: ['de', 'fr'],
-        approvalMode: 'automatic',
+        policies: [{ match: {}, approve: 'automatic' }],
         budgetUsd: 1,
       }),
     );

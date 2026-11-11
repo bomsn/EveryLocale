@@ -138,6 +138,8 @@ test('real HTTP provider transport, durable worker, owner approval and CLI expor
     publicOrigin: 'http://localhost:4310',
     secureCookie: false,
     providersReady: true,
+    logLevel: 'silent',
+    trustProxy: false,
   });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const port = (app.server.address() as { port: number }).port;

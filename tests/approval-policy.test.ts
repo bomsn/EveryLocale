@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { SqliteStore } from '../packages/store/dist/index.js';
-import { projectSchema, unitSchema, type Finding } from '../packages/core/dist/index.js';
+import { projectSchema, unitSchema, type Finding, policyFor } from '../packages/core/dist/index.js';
 import { createApp } from '../packages/server/dist/app.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
 
@@ -13,7 +13,7 @@ function fixture(mode: 'automatic' | 'human' = 'automatic') {
     name: 'Policy',
     targetLocales: ['de'],
     budgetUsd: 1,
-    approvalMode: mode,
+    policies: [{ match: {}, approve: mode }],
   });
   store.saveProject(project);
   store.importSources(project.id, [
@@ -110,7 +110,10 @@ test('approval policy changes preserve the queue, apply at completion, and prote
     const first = enqueue('initial');
     complete(first.id);
     assert.equal(store.getJob('policy', first.id).status, 'review');
-    store.saveProject({ ...project, approvalMode: 'automatic' });
+    store.saveProject({
+      ...project,
+      policies: [{ match: {}, translate: 'ai', approve: 'automatic' }],
+    });
     assert.equal(store.getJob('policy', first.id).status, 'review');
     assert.deepEqual(store.exportCatalog('policy', 'de').messages, {});
     store.importSources('policy', [
@@ -120,13 +123,16 @@ test('approval policy changes preserve the queue, apply at completion, and prote
     store.saveProject(project);
     complete(next.id, 'Willkommen {name}');
     assert.equal(store.getJob('policy', next.id).status, 'review');
+    // A stored project without policies reads as one human-approval rule.
     const legacy = { ...project } as Partial<typeof project>;
-    delete legacy.approvalMode;
+    delete legacy.policies;
     store.db
       .prepare('UPDATE projects SET config=? WHERE id=?')
       .run(JSON.stringify(legacy), project.id);
-    assert.equal(store.getProject(project.id).approvalMode, 'human');
-    assert.equal(store.listProjects()[0]!.approvalMode, 'human');
+    assert.equal(
+      policyFor(store.getProject(project.id), { id: 'hello', tags: [] }).approve,
+      'human',
+    );
   } finally {
     store.close();
   }
@@ -191,6 +197,8 @@ test('real HTTP worker automatically approves and exports without a human approv
     publicOrigin: 'http://localhost:4310',
     secureCookie: false,
     providersReady: true,
+    logLevel: 'silent',
+    trustProxy: false,
   });
   const base = {
     baseUrl: `http://127.0.0.1:${(provider.address() as { port: number }).port}/v1`,
@@ -223,7 +231,12 @@ test('real HTTP worker automatically approves and exports without a human approv
       method: 'PUT',
       url: '/api/v1/projects/policy',
       headers: { authorization: `Bearer ${token.token}` },
-      payload: { name: 'Policy', targetLocales: ['de'], budgetUsd: 1, approvalMode: 'automatic' },
+      payload: {
+        name: 'Policy',
+        targetLocales: ['de'],
+        budgetUsd: 1,
+        policies: [{ match: {}, approve: 'automatic' }],
+      },
     });
     assert.equal(changedPolicy.statusCode, 403);
   } finally {

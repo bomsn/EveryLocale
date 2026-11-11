@@ -195,6 +195,8 @@ test('revoking a project token invalidates its existing browser session', async 
     publicOrigin: 'http://localhost:4310',
     secureCookie: false,
     providersReady: false,
+    logLevel: 'silent',
+    trustProxy: false,
   });
   try {
     const login = await app.inject({

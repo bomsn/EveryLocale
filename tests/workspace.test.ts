@@ -126,6 +126,8 @@ test('workspace summary and search keep project authorization and preview defaul
     publicOrigin: 'http://localhost:4310',
     secureCookie: false,
     providersReady: false,
+    logLevel: 'silent',
+    trustProxy: false,
   });
   const headers = { authorization: 'Bearer ' + token.token };
   try {

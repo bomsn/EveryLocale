@@ -7,6 +7,11 @@ export const unitSchema = z.object({
   kind: z.enum(['text', 'icu', 'html', 'markdown']).default('text'),
   context: z.string().max(4000).default(''),
   protectedTerms: z.array(z.string().min(1).max(240)).max(100).default([]),
+  /** Labels that approval policies match, such as `legal`. Tags never change the source revision. */
+  tags: z
+    .array(z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/i))
+    .max(20)
+    .default([]),
 });
 export type SourceUnit = z.infer<typeof unitSchema>;
 export const findingSchema = z.object({
@@ -20,6 +25,30 @@ export const reviewSchema = z.object({
   summary: z.string().max(2000),
 });
 export type Review = z.infer<typeof reviewSchema>;
+/** `*` matches within one path segment and `**` matches across segments. */
+const glob = z
+  .string()
+  .min(1)
+  .max(240)
+  .regex(/^[\w.:/*-]+$/, 'Use letters, digits, . : / - _ and *');
+export const policySchema = z
+  .object({
+    match: z
+      .object({
+        /** Namespace glob, the part of a unit id before `:`. */
+        namespace: glob.optional(),
+        /** Key glob, the part of a unit id after `:`. */
+        key: glob.optional(),
+        tag: z.string().min(1).max(40).optional(),
+      })
+      .strict()
+      .default({}),
+    /** `human` keeps the text away from every model: a person writes the translation. */
+    translate: z.enum(['ai', 'human']).default('ai'),
+    approve: z.enum(['automatic', 'human']).default('human'),
+  })
+  .strict();
+export type Policy = z.infer<typeof policySchema>;
 export type GlossaryEntry = { source: string; targets: Record<string, string>; keep?: boolean };
 export const projectSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,79}$/),
@@ -27,7 +56,17 @@ export const projectSchema = z.object({
   sourceLocale: z.string().default('en'),
   targetLocales: z.array(z.string().min(2).max(40)).max(100),
   budgetUsd: z.number().nonnegative().max(1000000),
-  approvalMode: z.enum(['automatic', 'human']).default('human'),
+  policies: z
+    .array(policySchema)
+    .min(1)
+    .max(100)
+    .default([{ match: {}, translate: 'ai', approve: 'human' }])
+    .refine(
+      (policies) => Object.keys(policies.at(-1)?.match ?? {}).length === 0,
+      'The last policy must match every message, so each message has an explicit rule',
+    ),
+  /** Unit id globs, such as `common:brand.*`, whose source text is used in every locale. */
+  locked: z.array(glob).max(200).default([]),
   glossary: z
     .array(
       z.object({
@@ -42,7 +81,15 @@ export const projectSchema = z.object({
   reviewerLanguage: z.string().min(2).max(40).default('en'),
 });
 export type Project = z.infer<typeof projectSchema>;
-export type JobStatus = 'pending' | 'running' | 'review' | 'failed' | 'stale' | 'approved';
+/** `awaiting` is a message whose policy needs a person to write the translation. */
+export type JobStatus =
+  | 'pending'
+  | 'running'
+  | 'awaiting'
+  | 'review'
+  | 'failed'
+  | 'stale'
+  | 'approved';
 export type TranslationRecord = {
   id: string;
   projectId: string;

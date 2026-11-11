@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import {
   extractDocument,
   hash,
+  sourceHash,
   unitSchema,
   validateTranslation,
   approvedCatalogSchema,
@@ -219,7 +220,7 @@ async function main() {
     const format = required('format');
     const document = extractDocument(content, format, option('namespace', 'document'));
     for (const unit of document.units) {
-      if (catalog.sources[unit.id] !== hash({ ...unit, sourceLocale: catalog.sourceLocale }))
+      if (catalog.sources[unit.id] !== sourceHash({ ...unit, sourceLocale: catalog.sourceLocale }))
         throw new Error(`Approved source revision differs for ${unit.id}`);
     }
     await atomicWrite(
@@ -238,7 +239,7 @@ async function main() {
     );
     const errors: string[] = [];
     for (const unit of units) {
-      if (catalog.sources[unit.id] !== hash(unit))
+      if (catalog.sources[unit.id] !== sourceHash(unit))
         errors.push(`${unit.id}: approval does not match source revision`);
       const translation = catalog.messages[unit.id];
       if (translation === undefined) {
