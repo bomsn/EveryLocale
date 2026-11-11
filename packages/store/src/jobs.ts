@@ -535,6 +535,8 @@ export function retry(store: SqliteStore, projectId: string, id: string, actor: 
 export type RequestStatus = {
   total: number;
   counts: Partial<Record<TranslationRecord['status'], number>>;
+  /** The same counts per locale, so a client can wait on some locales and not others. */
+  locales: Record<string, Partial<Record<TranslationRecord['status'], number>>>;
   /** Jobs that stop a release: failed, awaiting a person, in review or stale. */
   attention: Array<
     Pick<TranslationRecord, 'id' | 'unitId' | 'locale' | 'status' | 'failure' | 'error'> & {
@@ -552,10 +554,16 @@ export function requestStatus(store: SqliteStore, projectId: string, key: string
   if (!row) throw new ContractError('not_found', 'Submission not found', 404);
   const records = decodeStrings(row.job_ids).map((id) => store.getJob(projectId, id));
   const counts: RequestStatus['counts'] = {};
-  for (const job of records) counts[job.status] = (counts[job.status] ?? 0) + 1;
+  const locales: RequestStatus['locales'] = {};
+  for (const job of records) {
+    counts[job.status] = (counts[job.status] ?? 0) + 1;
+    const locale = (locales[job.locale] ??= {});
+    locale[job.status] = (locale[job.status] ?? 0) + 1;
+  }
   return {
     total: records.length,
     counts,
+    locales,
     attention: records
       .filter((job) => ATTENTION.has(job.status))
       .map((job) => ({

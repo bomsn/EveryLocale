@@ -49,16 +49,20 @@ export function exportCatalog(
   };
 }
 
+/**
+ * Exports every locale in one consistent read. Locales listed in `complete` must have a
+ * current approval for every source message; the others carry what is approved so far.
+ */
 export function exportBundle(
   store: SqliteStore,
   projectId: string,
-  requireCurrent = true,
+  complete: readonly string[] | 'all' = 'all',
 ): import('@everylocale/core').CatalogBundle {
   // One read transaction prevents publications from changing between locale exports.
   return store.db.transaction(() => {
     const project = store.getProject(projectId);
     const catalogs = [project.sourceLocale, ...project.targetLocales].map((locale) => ({
-      ...store.exportCatalog(projectId, locale, requireCurrent),
+      ...store.exportCatalog(projectId, locale, complete === 'all' || complete.includes(locale)),
       sourceLocale: project.sourceLocale,
     }));
     return {

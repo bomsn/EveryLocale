@@ -21,7 +21,8 @@ import * as releases from './releases.js';
 import * as access from './access.js';
 import * as sessions from './sessions.js';
 export type { Session } from './sessions.js';
-import type { Scope } from './decode.js';
+import type { DocumentOptions, Scope } from './decode.js';
+export { documentOptionsSchema, type DocumentOptions } from './decode.js';
 import type { ImportResult } from './approvals.js';
 import type { RequestStatus } from './jobs.js';
 export type { RequestStatus } from './jobs.js';
@@ -103,7 +104,7 @@ export interface TranslationStore {
   exportCatalog(projectId: string, locale: string, requireCurrent?: boolean): ApprovedCatalog;
   exportBundle(
     projectId: string,
-    requireCurrent?: boolean,
+    complete?: readonly string[] | 'all',
   ): import('@everylocale/core').CatalogBundle;
 }
 export interface LocalizationStore extends TranslationStore, DeliveryStore {
@@ -115,6 +116,7 @@ export interface LocalizationStore extends TranslationStore, DeliveryStore {
     namespace: string,
     format: string,
     content: string,
+    options?: DocumentOptions,
   ): { changed: string[]; unchanged: string[]; units: string[]; sourceRevision: string };
   exportDocument(
     project: string,
@@ -139,10 +141,15 @@ export interface LocalizationStore extends TranslationStore, DeliveryStore {
     pendingUnits: string[];
     sourceRevision: string;
   };
-  documents(
-    project: string,
-  ): Array<{ namespace: string; format: string; units: string[]; sourceRevision: string }>;
+  documents(project: string): Array<{
+    namespace: string;
+    format: string;
+    units: string[];
+    sourceRevision: string;
+    options: DocumentOptions;
+  }>;
   withdraw(project: string, unitIds: string[], actor: string): void;
+  removeDocument(project: string, namespace: string, actor: string): void;
   getJob(project: string, id: string): TranslationRecord;
   listJobs(
     project: string,
@@ -286,8 +293,14 @@ export class SqliteStore implements LocalizationStore {
   importSources(projectId: string, inputs: SourceUnit[]) {
     return sources.importSources(this, projectId, inputs);
   }
-  importDocument(projectId: string, namespace: string, format: string, content: string) {
-    return sources.importDocument(this, projectId, namespace, format, content);
+  importDocument(
+    projectId: string,
+    namespace: string,
+    format: string,
+    content: string,
+    options?: DocumentOptions,
+  ) {
+    return sources.importDocument(this, projectId, namespace, format, content, options);
   }
   exportDocument(projectId: string, namespace: string, locale: string) {
     return sources.exportDocument(this, projectId, namespace, locale);
@@ -297,6 +310,9 @@ export class SqliteStore implements LocalizationStore {
    */
   previewDocument(projectId: string, namespace: string, locale: string) {
     return sources.previewDocument(this, projectId, namespace, locale);
+  }
+  removeDocument(projectId: string, namespace: string, actor: string) {
+    sources.removeDocument(this, projectId, namespace, actor);
   }
   withdraw(projectId: string, unitIds: string[], actor: string) {
     sources.withdraw(this, projectId, unitIds, actor);
@@ -401,9 +417,9 @@ export class SqliteStore implements LocalizationStore {
   }
   exportBundle(
     projectId: string,
-    requireCurrent = true,
+    complete: readonly string[] | 'all' = 'all',
   ): import('@everylocale/core').CatalogBundle {
-    return releases.exportBundle(this, projectId, requireCurrent);
+    return releases.exportBundle(this, projectId, complete);
   }
   snapshot(projectId: string, locale: string): ApprovedCatalog {
     return releases.snapshot(this, projectId, locale);

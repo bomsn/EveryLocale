@@ -1,24 +1,61 @@
-const commands: Record<string, string> = {
-  extract:
-    'Read a document into source segments. No model requests.\n\npnpm cli extract --input examples/messages.json --format json --namespace messages --output source.json\n\nFormats: json, yaml, po, markdown, mdx, html. Keep the namespace stable across edits. Optional: --source-locale en.',
-  'extract-code':
-    'Read explicit message declarations from TypeScript/React files.\n\npnpm cli extract-code --input ../my-app/src --output source.json\n\nOptional: --source-locale en. Arbitrary strings are not extracted.',
-  sync: 'Import sources and queue translation for an existing project.\n\npnpm cli sync --project first-app --input source.json --locales de --wait --timeout 600\n\nComma-separate target locales. --wait stops on blocked/failed work. --import-only imports without model requests.',
-  export:
-    'Download one approved language catalog.\n\npnpm cli export --project first-app --locale de --output locales/de.catalog.json\n\nRequires current approvals. --allow-stale deliberately permits prior approved wording.',
-  pull: 'Download all configured languages as one complete approved release.\n\npnpm cli pull --project first-app --output locales\n\nRead current.json once; its revision identifies releases/REVISION/. Optional: --allow-stale.',
-  render:
-    'Produce a translated document in its original format from an approved catalog.\n\npnpm cli render --input examples/messages.json --format json --namespace messages --catalog locales/de.catalog.json --output locales/de.json\n\nUse the extraction namespace. The catalog identifies the source and target languages.',
-  check:
-    'Validate a catalog against current source segments.\n\npnpm cli check --input source.json --catalog locales/de.catalog.json',
-  rollback:
-    'Activate a retained complete release after verifying its files.\n\npnpm cli rollback --output locales --revision PREVIOUS_REVISION',
+const COMMANDS: Record<string, string> = {
+  sync: [
+    'Upload every source file matched by everylocale.config.json and queue translation.',
+    '',
+    '  everylocale sync [--wait] [--timeout 600] [--config path] [--url URL]',
+    '',
+    '--wait stops with a list of messages that need attention, or when all are approved.',
+    'Files deleted locally are withdrawn. Needs a token with import and translate.',
+  ].join('\n'),
+  pull: [
+    'Download approved translations, write a verified release, and render translated files.',
+    '',
+    '  everylocale pull [--config path] [--url URL]',
+    '',
+    'Live locales must be fully approved. Draft locales use source text for unapproved',
+    'messages and skip unapproved documents; both are listed. Needs the export scope.',
+  ].join('\n'),
+  import: [
+    'Send existing translated files to the service as candidates for review.',
+    '',
+    '  everylocale import --locale fr-CA [--config path] [--url URL]',
+    '',
+    'Each message follows its project policy. Rejected entries are listed with the reason.',
+  ].join('\n'),
+  codegen: [
+    'Write the declaration file that types message ids and their values.',
+    '',
+    '  everylocale codegen [--check] [--config path]',
+    '',
+    '--check fails when the committed file is out of date, for CI. No network access.',
+  ].join('\n'),
+  check: [
+    'Verify the committed release against the source files without network access.',
+    '',
+    '  everylocale check [--code src] [--json] [--config path]',
+    '',
+    'Fails on missing or stale translations in live locales, plural or argument mismatches,',
+    'altered release files and, with --code, unknown, dynamic or unused message ids.',
+  ].join('\n'),
+  rollback: [
+    'Point current.json at an earlier verified release.',
+    '',
+    '  everylocale rollback --revision REVISION [--config path]',
+  ].join('\n'),
 };
+
 export function help(command?: string): string {
-  const selected = command && commands[command];
-  return (
-    (selected ||
-      'EveryLocale: prepare translations before your app release.\n\nStart: docs/GETTING-STARTED.md\nConnect an app: docs/CONNECT.md\nCommand reference: docs/CLI.md\n\nCommands: extract, extract-code, sync, export, pull, render, check, rollback\nUse pnpm cli COMMAND --help for an example.') +
-    '\n\nOnline commands use EVERYLOCALE_URL and a scoped EVERYLOCALE_TOKEN from your environment. Remote services require HTTPS.'
-  );
+  const selected = command ? COMMANDS[command] : undefined;
+  return [
+    selected ??
+      [
+        'EveryLocale keeps your app translated from everylocale.config.json.',
+        '',
+        `Commands: ${Object.keys(COMMANDS).join(', ')}`,
+        'Run everylocale COMMAND --help for its options.',
+      ].join('\n'),
+    '',
+    'Online commands read EVERYLOCALE_URL and a scoped EVERYLOCALE_TOKEN from the environment.',
+    'Remote services require HTTPS.',
+  ].join('\n');
 }

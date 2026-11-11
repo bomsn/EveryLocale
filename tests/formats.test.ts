@@ -88,6 +88,7 @@ test('formats come from one registry, reject duplicates and unknown ids, and acc
     () =>
       registerFormat({
         id: 'json',
+        kind: 'messages',
         extract: () => {
           throw new Error('unused');
         },
@@ -97,6 +98,7 @@ test('formats come from one registry, reject duplicates and unknown ids, and acc
   const lines = (content: string) => content.split('\n').filter(Boolean);
   registerFormat({
     id: 'lines',
+    kind: 'content',
     extract: (content, { namespace }) => ({
       format: 'lines',
       content,

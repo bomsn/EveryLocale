@@ -29,6 +29,7 @@ const documentSchema = z.object({
   format: z.string(),
   unit_ids: z.string(),
   source_revision: z.string(),
+  options: z.string(),
 });
 export const documentRow = (row: unknown) => documentSchema.parse(row);
 const tokenSchema = z.object({
@@ -55,3 +56,16 @@ export function approvedSource(catalog: ApprovedCatalog, unitId: string): string
     );
   return source;
 }
+
+const documentOptions = z
+  .object({
+    frontMatter: z.array(z.string().min(1)).optional(),
+    tags: z.array(z.string().min(1).max(40)).max(20).optional(),
+    /** Who maintains the document, so a sync withdraws only documents it uploaded itself. */
+    origin: z.string().min(1).max(80).optional(),
+  })
+  .strict();
+/** Extraction settings stored with a document, applied identically on every re-extraction. */
+export type DocumentOptions = z.infer<typeof documentOptions>;
+export const documentOptionsSchema = documentOptions;
+export const decodeOptions = column(documentOptions);

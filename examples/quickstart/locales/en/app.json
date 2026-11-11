@@ -1,0 +1,5 @@
+{
+  "welcome": "Welcome, {name}!",
+  "save": "Save",
+  "projects": "{count, plural, one {# project} other {# projects}}"
+}

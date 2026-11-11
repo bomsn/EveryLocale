@@ -1,0 +1,31 @@
+{
+  "name": "@everylocale/runtime",
+  "version": "0.2.0",
+  "description": "Framework-free formatting of approved, precompiled EveryLocale messages, and verified release loading on the server.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@everylocale/core": "workspace:*",
+    "@formatjs/icu-messageformat-parser": "3.5.23",
+    "intl-messageformat": "12.1.5",
+    "zod": "4.6.7"
+  }
+}

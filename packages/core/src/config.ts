@@ -40,7 +40,8 @@ const fileSchema = z
       .describe(
         'Path relative to the config file. {locale} is required; {namespace} matches one or more path segments.',
       ),
-    format: z.string().refine(isFormat, 'Unknown document format'),
+    /** Checked against the format registry after plugins load; see `unknownFormats`. */
+    format: z.string().min(1),
     namespace: z
       .string()
       .regex(NAMESPACE)
@@ -52,6 +53,11 @@ const fileSchema = z
       .describe(
         'Markdown and MDX front matter keys to translate. Defaults to title and description.',
       ),
+    tags: z
+      .array(z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/i))
+      .max(20)
+      .optional()
+      .describe('Tags for every message from these files, matched by project policies.'),
   })
   .strict()
   .superRefine((file, context) => {
@@ -77,6 +83,22 @@ export const appConfigSchema = z
     sourceLocale: localeId.describe('The language the source files are written in.'),
     locales: z.array(localeSchema).min(1).describe('Target locales, in display order.'),
     files: z.array(fileSchema).default([]),
+    formats: z
+      .array(z.string().min(1))
+      .default([])
+      .describe(
+        'Packages whose default export is a document format, loaded before files are read.',
+      ),
+    codegen: z
+      .object({
+        output: z
+          .string()
+          .min(1)
+          .default('everylocale.generated.d.ts')
+          .describe('Declaration file that types message ids and values.'),
+      })
+      .strict()
+      .default({ output: 'everylocale.generated.d.ts' }),
     release: z
       .object({
         directory: z
@@ -97,6 +119,15 @@ export type AppConfig = z.output<typeof appConfigSchema> & {
 };
 
 export class ConfigError extends Error {}
+
+/** File patterns whose format is not registered; checked after format plugins load. */
+export function unknownFormats(config: Pick<AppConfig, 'files'>): string[] {
+  return config.files.flatMap((file, index) =>
+    isFormat(file.format)
+      ? []
+      : [`files.${String(index)}.format: Unknown document format ${file.format}`],
+  );
+}
 
 /** Validates a parsed config file and derives the locale registry from it. */
 export function parseAppConfig(input: unknown): AppConfig {

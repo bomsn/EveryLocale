@@ -18,6 +18,11 @@ export type ExtractOptions = {
  */
 export interface DocumentFormat {
   readonly id: string;
+  /**
+   * `messages` formats hold UI strings an app formats at runtime and types with codegen;
+   * `content` formats are documents rendered into translated files.
+   */
+  readonly kind: 'messages' | 'content';
   extract(content: string, options: ExtractOptions): ExtractedDocument;
 }
 
@@ -40,6 +45,12 @@ export function registerFormat(format: DocumentFormat): void {
 
 export const formatIds = (): string[] => [...formats.keys()];
 export const isFormat = (id: string): boolean => formats.has(id);
+export function formatKind(id: string): DocumentFormat['kind'] {
+  const format = formats.get(id);
+  if (!format)
+    throw new ContractError('unsupported_format', `Unsupported document format: ${id}`, 422);
+  return format.kind;
+}
 
 export function extractDocument(
   content: string,

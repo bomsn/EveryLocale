@@ -10,7 +10,19 @@ export function releaseRoutes({ app, auth, store }: RouteContext) {
   app.get('/api/v1/projects/:project/bundle', async (request) => {
     const id = projectId(request);
     auth.requireUnlimited(auth.access(request, id, 'export'));
-    return store.exportBundle(id, current(request.query, 'true'));
+    // complete names the locales that must be fully approved; by default every target locale.
+    const { complete } = z
+      .object({ complete: z.string().max(4000).optional() })
+      .parse(request.query);
+    return store.exportBundle(
+      id,
+      complete === undefined
+        ? 'all'
+        : complete
+            .split(',')
+            .map((locale) => locale.trim())
+            .filter(Boolean),
+    );
   });
   app.get('/api/v1/projects/:project/exports/:locale', async (request) => {
     const id = projectId(request);

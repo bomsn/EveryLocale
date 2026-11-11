@@ -1,6 +1,7 @@
 export {
   extractDocument,
   formatIds,
+  formatKind,
   isFormat,
   registerFormat,
   MAX_DOCUMENT_BYTES,

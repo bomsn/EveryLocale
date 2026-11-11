@@ -79,7 +79,8 @@
             "description": "Path relative to the config file. {locale} is required; {namespace} matches one or more path segments."
           },
           "format": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "namespace": {
             "description": "Namespace for a pattern without {namespace}, or a prefix for one with it.",
@@ -93,6 +94,15 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "tags": {
+            "description": "Tags for every message from these files, matched by project policies.",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$"
+            }
           }
         },
         "required": [
@@ -101,6 +111,30 @@
         ],
         "additionalProperties": false
       }
+    },
+    "formats": {
+      "default": [],
+      "description": "Packages whose default export is a document format, loaded before files are read.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "codegen": {
+      "default": {
+        "output": "everylocale.generated.d.ts"
+      },
+      "type": "object",
+      "properties": {
+        "output": {
+          "default": "everylocale.generated.d.ts",
+          "description": "Declaration file that types message ids and values.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
     },
     "release": {
       "default": {

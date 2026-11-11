@@ -74,5 +74,6 @@ function extract(content: string, namespace: string): ExtractedDocument {
 
 export const poFormat: DocumentFormat = {
   id: 'po',
+  kind: 'messages',
   extract: (content, { namespace }) => extract(content, namespace),
 };

@@ -1,4 +1,5 @@
 import type { SqliteStore } from './index.js';
+import { decodeOptions, type DocumentOptions } from './decode.js';
 import {
   ContractError,
   contextHash,
@@ -58,15 +59,27 @@ export function importSources(store: SqliteStore, projectId: string, inputs: Sou
   });
 }
 
+/** How a stored document is extracted again for export and preview, so ids never drift. */
+function extract(content: string, format: string, namespace: string, options: DocumentOptions) {
+  const document = extractDocument(content, format, namespace, {
+    ...(options.frontMatter ? { frontMatter: options.frontMatter } : {}),
+  });
+  return {
+    ...document,
+    units: document.units.map((unit) => ({ ...unit, tags: options.tags ?? [] })),
+  };
+}
+
 export function importDocument(
   store: SqliteStore,
   projectId: string,
   namespace: string,
   format: string,
   content: string,
+  options: DocumentOptions = {},
 ) {
   const project = store.getProject(projectId);
-  const document = extractDocument(content, format, namespace);
+  const document = extract(content, format, namespace, options);
   const units = document.units.map((x) => ({ ...x, sourceLocale: project.sourceLocale }));
   return store.transaction(() => {
     const previous = store.db
@@ -83,9 +96,17 @@ export function importDocument(
     const sourceRevision = hash({ format, content });
     store.db
       .prepare(
-        'INSERT INTO documents(project_id,namespace,format,content,unit_ids,source_revision) VALUES(?,?,?,?,?,?) ON CONFLICT(project_id,namespace) DO UPDATE SET format=excluded.format,content=excluded.content,unit_ids=excluded.unit_ids,source_revision=excluded.source_revision',
+        'INSERT INTO documents(project_id,namespace,format,content,unit_ids,source_revision,options) VALUES(?,?,?,?,?,?,?) ON CONFLICT(project_id,namespace) DO UPDATE SET format=excluded.format,content=excluded.content,unit_ids=excluded.unit_ids,source_revision=excluded.source_revision,options=excluded.options',
       )
-      .run(projectId, namespace, format, content, JSON.stringify(ids), sourceRevision);
+      .run(
+        projectId,
+        namespace,
+        format,
+        content,
+        JSON.stringify(ids),
+        sourceRevision,
+        JSON.stringify(options),
+      );
     return { ...result, units: ids, sourceRevision };
   });
 }
@@ -100,10 +121,10 @@ export function exportDocument(
   const row = store.db
     .prepare('SELECT * FROM documents WHERE project_id=? AND namespace=?')
     .get(projectId, namespace) as
-    | { format: string; content: string; source_revision: string }
+    | { format: string; content: string; source_revision: string; options: string }
     | undefined;
   if (!row) throw new ContractError('not_found', 'Document not found', 404);
-  const document = extractDocument(row.content, row.format, namespace);
+  const document = extract(row.content, row.format, namespace, decodeOptions(row.options));
   const catalog = store.exportCatalog(projectId, locale);
   for (const unit of document.units) {
     if (catalog.sources[unit.id] !== sourceHash({ ...unit, sourceLocale: project.sourceLocale }))
@@ -143,10 +164,10 @@ export function previewDocument(
   const row = store.db
     .prepare('SELECT * FROM documents WHERE project_id=? AND namespace=?')
     .get(projectId, namespace) as
-    | { format: string; content: string; source_revision: string }
+    | { format: string; content: string; source_revision: string; options: string }
     | undefined;
   if (!row) throw new ContractError('not_found', 'Document not found', 404);
-  const document = extractDocument(row.content, row.format, namespace);
+  const document = extract(row.content, row.format, namespace, decodeOptions(row.options));
   const translations = dictionary<string>(),
     pendingUnits: string[] = [];
   for (const rawUnit of document.units) {
@@ -217,7 +238,7 @@ export function documents(store: SqliteStore, projectId: string) {
   store.getProject(projectId);
   return store.db
     .prepare(
-      'SELECT namespace,format,unit_ids,source_revision FROM documents WHERE project_id=? ORDER BY namespace',
+      'SELECT namespace,format,unit_ids,source_revision,options FROM documents WHERE project_id=? ORDER BY namespace',
     )
     .all(projectId)
     .map((row) => documentRow(row))
@@ -226,5 +247,25 @@ export function documents(store: SqliteStore, projectId: string) {
       format: row.format,
       units: decodeStrings(row.unit_ids),
       sourceRevision: row.source_revision,
+      options: decodeOptions(row.options),
     }));
+}
+
+/** Withdraws every message of a document and forgets the document itself. */
+export function removeDocument(
+  store: SqliteStore,
+  projectId: string,
+  namespace: string,
+  actor: string,
+) {
+  store.transaction(() => {
+    const row = store.db
+      .prepare('SELECT unit_ids FROM documents WHERE project_id=? AND namespace=?')
+      .get(projectId, namespace) as { unit_ids: string } | undefined;
+    if (!row) throw new ContractError('not_found', 'Document not found', 404);
+    store.withdraw(projectId, decodeStrings(row.unit_ids), actor);
+    store.db
+      .prepare('DELETE FROM documents WHERE project_id=? AND namespace=?')
+      .run(projectId, namespace);
+  });
 }

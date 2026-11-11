@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseAppConfig, defineLocales, ConfigError } from '../packages/core/dist/index.js';
+import {
+  parseAppConfig,
+  defineLocales,
+  ConfigError,
+  unknownFormats,
+} from '../packages/core/dist/index.js';
 import { CONFIG_SCHEMA_PATH, configSchemaText } from '../tools/config-schema.js';
 
 const valid = {
@@ -51,9 +56,13 @@ test('invalid configs fail with every problem and its location', () => {
   assert.match(message, /locales\.0\.id: Use a BCP 47 locale id/);
   assert.match(message, /files\.0: A pattern contains \{locale\} exactly once/);
   assert.match(message, /files\.0: A pattern without \{namespace\} needs namespace/);
-  assert.match(message, /files\.1\.format: Unknown document format/);
   assert.match(message, /files\.1: Patterns stay inside the config directory/);
   assert.match(failure({ ...valid, locales: [{ id: 'es' }, { id: 'ES' }] }), /unique/);
+  const plugin = parseAppConfig({
+    ...valid,
+    files: [{ pattern: 'a/{locale}.xliff', format: 'xliff', namespace: 'a' }],
+  });
+  assert.deepEqual(unknownFormats(plugin), ['files.0.format: Unknown document format xliff']);
   assert.match(failure({ ...valid, extra: true }), /Unrecognized key/);
 });
 

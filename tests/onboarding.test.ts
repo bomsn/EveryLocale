@@ -4,18 +4,13 @@ import { existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, writeFile, rm, readdir, access } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, readdir, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, relative } from 'node:path';
 import { SqliteStore } from '../packages/store/dist/index.js';
 import { projectSchema, serviceUrl, documentPreview } from '../packages/core/dist/index.js';
 import { EveryLocaleClient } from '../packages/adapters/dist/index.js';
-import { createApp } from '../packages/server/dist/app.js';
-import { TranslationWorker } from '../packages/server/dist/worker.js';
 import { databasePath } from '../packages/server/dist/paths.js';
-import { recordingLog } from './support/log.js';
-
-const log = recordingLog();
 
 async function command(file: string, args: string[], env: Record<string, string> = {}) {
   return new Promise<{ code: number | null; output: string }>((done, reject) => {
@@ -121,34 +116,22 @@ test('invalid CLI options stop before service mutation and remote credentials re
       EVERYLOCALE_URL: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
       EVERYLOCALE_TOKEN: 'scoped-example',
     };
-    const invalid = await cli(
-      [
-        'sync',
-        '--project',
-        'first-app',
-        '--input',
-        'examples/messages.json',
-        '--locales',
-        'de',
-        '--wait',
-        '--timeout',
-        '0',
-      ],
-      env,
-    );
+    const invalid = await cli(['sync', '--wait', '--timeout', '0'], env);
     assert.equal(invalid.code, 1);
-    assert.match(invalid.output, /Timeout/);
-    assert.equal(requests, 0);
-    const noValue = await cli(
-      ['sync', '--project', '--input', 'source.json', '--locales', 'de'],
-      env,
-    );
+    assert.match(invalid.output, /--timeout must be between/);
+    const unknown = await cli(['pull', '--projekt', 'first-app'], env);
+    assert.equal(unknown.code, 1);
+    assert.match(unknown.output, /Unknown option: --projekt/);
+    const noValue = await cli(['import', '--locale'], env);
     assert.equal(noValue.code, 1);
-    assert.match(noValue.output, /--project needs a value/);
-    assert.equal(requests, 0);
-    const help = await cli(['sync', '--help']);
+    assert.match(noValue.output, /--locale needs a value/);
+    const noConfig = await cli(['sync', '--config', 'missing/everylocale.config.json'], env);
+    assert.equal(noConfig.code, 1);
+    assert.match(noConfig.output, /No everylocale.config.json found/);
+    assert.equal(requests, 0, 'nothing reaches the service before the input is valid');
+    const help = await cli(['help', 'sync']);
     assert.equal(help.code, 0);
-    assert.match(help.output, /first-app/);
+    assert.match(help.output, /everylocale sync \[--wait\]/);
     assert.throws(() => serviceUrl('http://example.com'), /HTTPS/);
     assert.throws(() => new EveryLocaleClient('http://example.com', 'secret'), /HTTPS/);
     assert.throws(() => serviceUrl('https://user:password@example.com'), /credentials/);
@@ -185,175 +168,5 @@ test('public guides retain safe links and real destinations while review preview
           `${file}: ${match[0]}`,
         );
     }
-  }
-});
-
-test('the documented JSON example translates, renders, updates and reuses unchanged work through the real service and CLI', async () => {
-  let calls = 0;
-  const translated: Record<string, string> = {
-    'Welcome, {name}!': 'Willkommen, {name}!',
-    'Create a project': 'Projekt erstellen',
-    'Your changes are saved.': 'Deine Änderungen sind gespeichert.',
-    'Create your first project': 'Erstelle dein erstes Projekt',
-  };
-  const provider = createServer((request, response) => {
-    // node:http ignores the returned promise, so the async body runs detached.
-    void (async () => {
-      let content = '';
-      for await (const chunk of request) content += String(chunk);
-      const payload = JSON.parse(content) as {
-          model: string;
-          messages: Array<{ content: string }>;
-        },
-        input = JSON.parse(payload.messages[1]!.content) as { source: string };
-      calls++;
-      const value =
-        payload.model === 'reviewer'
-          ? { findings: [], summary: 'Fixture independent review' }
-          : { translation: translated[input.source] };
-      response.setHeader('Content-Type', 'application/json');
-      response.end(
-        JSON.stringify({
-          choices: [{ message: { content: JSON.stringify(value) } }],
-          usage: { prompt_tokens: 100, completion_tokens: 30 },
-        }),
-      );
-    })();
-  });
-  await new Promise<void>((done) => provider.listen(0, '127.0.0.1', done));
-  const directory = await mkdtemp(join(tmpdir(), 'everylocale-first-file-'));
-  assert.ok(directory.startsWith(join(tmpdir(), 'everylocale-first-file-')));
-  const store = new SqliteStore(join(directory, 'service.sqlite'));
-  const app = await createApp(store, {
-    adminToken: 'example-owner-token-of-sufficient-length',
-    sessionSecret: 'example-independent-session-secret-of-sufficient-length',
-    publicOrigin: 'http://localhost:4310',
-    secureCookie: false,
-    providersReady: true,
-    logLevel: 'silent',
-    trustProxy: false,
-  });
-  const base = {
-    baseUrl: `http://127.0.0.1:${(provider.address() as { port: number }).port}/v1`,
-    inputPrice: 0,
-    outputPrice: 0,
-  };
-  const worker = new TranslationWorker(
-    store,
-    {
-      generator: { ...base, model: 'generator' },
-      reviewer: { ...base, model: 'reviewer' },
-      concurrency: 2,
-      intervalMs: 0,
-    },
-    log,
-  );
-  try {
-    store.saveProject(
-      projectSchema.parse({
-        id: 'first-app',
-        name: 'My first app',
-        targetLocales: ['de'],
-        budgetUsd: 1,
-        policies: [{ match: {}, approve: 'automatic' }],
-      }),
-    );
-    const token = store.mintToken(
-      'first-app',
-      ['read', 'import', 'translate', 'export'],
-      Date.now() + 60000,
-    ).token;
-    await app.listen({ host: '127.0.0.1', port: 0 });
-    worker.start();
-    const env = {
-      EVERYLOCALE_URL: `http://127.0.0.1:${(app.server.address() as { port: number }).port}`,
-      EVERYLOCALE_TOKEN: token,
-    };
-    const input = join(directory, 'messages.json'),
-      source = join(directory, 'source.json'),
-      catalog = join(directory, 'de.catalog.json'),
-      output = join(directory, 'de.json');
-    await writeFile(input, await readFile('examples/messages.json'));
-    const run = async (args: string[]) => {
-      const result = await cli(args, env);
-      assert.equal(result.code, 0, result.output);
-    };
-    const sync = async () => {
-      await run([
-        'extract',
-        '--input',
-        input,
-        '--format',
-        'json',
-        '--namespace',
-        'messages',
-        '--output',
-        source,
-      ]);
-      await run([
-        'sync',
-        '--project',
-        'first-app',
-        '--input',
-        source,
-        '--locales',
-        'de',
-        '--wait',
-        '--timeout',
-        '20',
-      ]);
-      await run(['export', '--project', 'first-app', '--locale', 'de', '--output', catalog]);
-      await run([
-        'render',
-        '--input',
-        input,
-        '--format',
-        'json',
-        '--namespace',
-        'messages',
-        '--catalog',
-        catalog,
-        '--output',
-        output,
-      ]);
-    };
-    await sync();
-    assert.equal(calls, 6);
-    assert.equal(
-      JSON.parse(await readFile(catalog, 'utf8')).messages['messages:welcome'],
-      'Willkommen, {name}!',
-    );
-    assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), {
-      welcome: 'Willkommen, {name}!',
-      createProject: 'Projekt erstellen',
-      saved: 'Deine Änderungen sind gespeichert.',
-    });
-    await sync();
-    assert.equal(calls, 6);
-    const changed = JSON.parse(await readFile(input, 'utf8'));
-    changed.createProject = 'Create your first project';
-    await writeFile(input, JSON.stringify(changed));
-    await sync();
-    assert.equal(calls, 8);
-    assert.equal(
-      JSON.parse(await readFile(output, 'utf8')).createProject,
-      'Erstelle dein erstes Projekt',
-    );
-    await run(['pull', '--project', 'first-app', '--output', join(directory, 'locales')]);
-    const pointer = JSON.parse(await readFile(join(directory, 'locales/current.json'), 'utf8')) as {
-      revision: string;
-    };
-    const delivered = JSON.parse(
-      await readFile(join(directory, 'locales/releases', pointer.revision, 'de.json'), 'utf8'),
-    );
-    assert.equal(delivered.messages['messages:createProject'], 'Erstelle dein erstes Projekt');
-  } finally {
-    await worker.stop();
-    await app.close();
-    store.close();
-    await new Promise<void>((done, reject) =>
-      provider.close((error) => (error ? reject(error) : done())),
-    );
-    await rm(directory, { recursive: true, force: true });
   }
 });

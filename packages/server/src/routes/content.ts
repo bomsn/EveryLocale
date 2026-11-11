@@ -8,6 +8,7 @@ import {
   previewMessage,
   unitSchema,
 } from '@everylocale/core';
+import { documentOptionsSchema } from '@everylocale/store';
 import { itemId, projectId, type RouteContext } from '../http/context.js';
 
 const MAX_UNITS = 5000;
@@ -29,9 +30,10 @@ export function contentRoutes({ app, auth, store, styleNonce }: RouteContext) {
         content: z.string(),
         format: z.string().refine(isFormat, 'Unsupported document format'),
         namespace: z.string().min(1).max(160),
+        options: documentOptionsSchema.default({}),
       })
       .parse(request.body);
-    return store.importDocument(id, body.namespace, body.format, body.content);
+    return store.importDocument(id, body.namespace, body.format, body.content, body.options);
   });
   app.get('/api/v1/projects/:project/documents', async (request) => {
     const id = projectId(request);
@@ -44,6 +46,13 @@ export function contentRoutes({ app, auth, store, styleNonce }: RouteContext) {
     const { locale } = z.object({ locale: z.string() }).parse(request.params);
     auth.requireLocale(user, locale);
     return store.exportDocument(id, itemId(request), locale);
+  });
+  app.delete('/api/v1/projects/:project/documents/:namespace', async (request) => {
+    const id = projectId(request);
+    const user = auth.access(request, id, 'import');
+    const { namespace } = z.object({ namespace: z.string().min(1).max(160) }).parse(request.params);
+    store.removeDocument(id, namespace, user.actor);
+    return { ok: true };
   });
   app.post('/api/v1/projects/:project/withdraw', async (request) => {
     const id = projectId(request);

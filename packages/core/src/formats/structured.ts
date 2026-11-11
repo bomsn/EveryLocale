@@ -63,9 +63,11 @@ function structured(
 
 export const jsonFormat: DocumentFormat = {
   id: 'json',
+  kind: 'messages',
   extract: (content, { namespace }) => structured(content, 'json', namespace),
 };
 export const yamlFormat: DocumentFormat = {
   id: 'yaml',
+  kind: 'messages',
   extract: (content, { namespace }) => structured(content, 'yaml', namespace),
 };

@@ -5,11 +5,13 @@ RUN npm install -g pnpm@9.15.9
 WORKDIR /build
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json ./packages/core/package.json
+COPY packages/runtime/package.json ./packages/runtime/package.json
 COPY packages/store/package.json ./packages/store/package.json
 COPY packages/server/package.json ./packages/server/package.json
 COPY packages/react/package.json ./packages/react/package.json
 COPY packages/adapters/package.json ./packages/adapters/package.json
 COPY packages/cli/package.json ./packages/cli/package.json
+COPY examples/next/package.json ./examples/next/package.json
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build && pnpm typecheck && pnpm test

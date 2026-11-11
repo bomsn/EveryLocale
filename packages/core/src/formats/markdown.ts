@@ -164,6 +164,7 @@ function verify(original: string, rendered: string, dialect: Dialect, translated
 function format(dialect: Dialect): DocumentFormat {
   return {
     id: dialect,
+    kind: 'content',
     extract(content, { namespace, frontMatter: keys = DEFAULT_FRONT_MATTER_KEYS }) {
       const tree = parse(content, dialect);
       const segments = new SegmentCollector(namespace);

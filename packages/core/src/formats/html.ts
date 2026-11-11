@@ -158,6 +158,7 @@ function addSentence(content: string, node: HtmlElement, segments: SegmentCollec
 
 export const htmlFormat: DocumentFormat = {
   id: 'html',
+  kind: 'content',
   extract: (content, { namespace }) => extract(content, namespace),
 };
 

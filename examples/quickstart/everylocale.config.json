@@ -1,0 +1,16 @@
+{
+  "$schema": "../../packages/core/schema/config-1.json",
+  "version": 1,
+  "project": "first-app",
+  "sourceLocale": "en",
+  "locales": [{ "id": "de" }, { "id": "fr", "status": "draft" }],
+  "files": [
+    { "pattern": "locales/{locale}/{namespace}.json", "format": "json" },
+    {
+      "pattern": "content/{locale}/{namespace}.md",
+      "format": "markdown",
+      "namespace": "content",
+      "tags": ["help"]
+    }
+  ]
+}

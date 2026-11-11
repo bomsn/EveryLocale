@@ -108,6 +108,7 @@ const MIGRATIONS: readonly Migration[] = [
         ALTER TABLE access_tokens ADD COLUMN locales TEXT;
         ALTER TABLE access_tokens ADD COLUMN namespaces TEXT;
         ALTER TABLE jobs ADD COLUMN failure TEXT;
+        ALTER TABLE documents ADD COLUMN options TEXT NOT NULL DEFAULT '{}';
         ALTER TABLE jobs ADD COLUMN failed_at INTEGER;
         CREATE INDEX jobs_failures ON jobs(project_id, status, failed_at);
         CREATE TABLE sessions (
