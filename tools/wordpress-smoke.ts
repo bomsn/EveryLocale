@@ -57,6 +57,17 @@ function found<T>(value: T | undefined, description: string): T {
   if (value === undefined) throw new Error(`WordPress smoke could not find ${description}`);
   return value;
 }
+/**
+ * A freshly started container can take longer than the usual wait to accept connections from
+ * the host when the machine is busy, so container starts get a longer wait than later steps.
+ */
+const serviceReachable = async () => {
+  try {
+    return (await fetch('http://localhost:4312/health')).ok;
+  } catch {
+    return false;
+  }
+};
 async function until(check: () => Promise<boolean>, timeout = 15000) {
   const end = Date.now() + timeout;
   while (!(await check())) {
@@ -122,13 +133,7 @@ try {
     ],
     true,
   );
-  await until(async () => {
-    try {
-      return (await fetch('http://localhost:4312/health')).ok;
-    } catch {
-      return false;
-    }
-  });
+  await until(serviceReachable, 60000);
   await api('/projects/wordpress', 'PUT', {
     name: 'Disposable WordPress',
     targetLocales: ['fr'],
@@ -300,13 +305,7 @@ try {
     'queued',
   );
   await docker(['start', 'everylocale-smoke-api'], true);
-  await until(async () => {
-    try {
-      return (await fetch('http://localhost:4312/health')).ok;
-    } catch {
-      return false;
-    }
-  });
+  await until(serviceReachable, 60000);
   await evaluate(`EveryLocale_Connector::deliver_withdrawal(${id});`);
   assert.deepEqual(await exportedMessages(), {});
   await api('/projects/wordpress', 'PUT', {
