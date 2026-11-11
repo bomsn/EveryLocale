@@ -70,3 +70,7 @@
   `LanguageSuggestion` takes `dismissed`, `onAccept`, `onDismiss` and required `labels` from the host and no longer stores anything in the browser.
 
   The Remix 2 helper `remixMeta` is removed. Use `PublishedRegistry.metadata()` or the framework adapter for your router.
+
+### Patch Changes
+
+- a5ee98b: Plural categories are recorded and compared in canonical CLDR order (`pluralCategories(locale, type)` in core). Node.js 22 and 24 report them in different orders, so a release pulled on one could fail `everylocale check` on the other with `plural_rules_changed`. Releases recorded in another order still pass, since the check compares the categories as sets.
