@@ -10,7 +10,7 @@ import { SqliteStore } from '../packages/store/dist/index.js';
 import { createApp } from '../packages/server/dist/app.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
 import { loadRelease } from '../packages/runtime/dist/server.js';
-import { recordingLog } from './support/log.js';
+import { recordingLog } from './support/log.ts';
 
 /** Fixture model translations by target locale and source text. */
 const TRANSLATIONS: Record<string, Record<string, string>> = {

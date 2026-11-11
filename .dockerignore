@@ -27,3 +27,4 @@ docs/*
 **/.react-router
 examples/*/build
 **/playwright-report
+**/coverage

@@ -4,8 +4,8 @@ import { mkdtemp, cp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { parseAppConfig } from '../packages/core/dist/config.js';
-import { releaseFromFiles, withLocalService } from './local-service.js';
-import { pnpmPath, releaseVersion, runPnpm } from './process.js';
+import { releaseFromFiles, withLocalService } from './local-service.ts';
+import { pnpmPath, releaseVersion, runPnpm } from './process.ts';
 
 const pnpm = pnpmPath();
 const version = releaseVersion();

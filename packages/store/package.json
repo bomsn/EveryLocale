@@ -1,10 +1,26 @@
 {
   "name": "@everylocale/store",
   "version": "0.3.0",
+  "description": "The SQLite state machine behind the EveryLocale service: sources, jobs, approvals, budgets, releases, tokens and migrations.",
+  "keywords": [
+    "localization",
+    "i18n",
+    "translation",
+    "icu",
+    "everylocale"
+  ],
+  "homepage": "https://github.com/bomsn/EveryLocale#readme",
+  "bugs": "https://github.com/bomsn/EveryLocale/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bomsn/EveryLocale.git",
+    "directory": "packages/store"
+  },
   "type": "module",
   "license": "MIT",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "exports": {
     ".": {
@@ -13,7 +29,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -23,5 +39,11 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

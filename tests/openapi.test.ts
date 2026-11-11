@@ -5,7 +5,7 @@ import { findingSchema, type Finding } from '../packages/core/dist/index.js';
 import { SqliteStore } from '../packages/store/dist/index.js';
 import { createApp } from '../packages/server/dist/app.js';
 import { Api, ResponseContractError } from '../packages/server/dist/http/contract.js';
-import { OPENAPI_PATH, openApiText } from '../tools/openapi.js';
+import { OPENAPI_PATH, openApiText } from '../tools/openapi.ts';
 
 type Document = {
   openapi: string;

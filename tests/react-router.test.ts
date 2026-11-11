@@ -23,7 +23,7 @@ import {
   languagePaths,
   useLocaleData,
 } from '../packages/react-router/dist/index.js';
-import { releaseFromFiles, withLocalService } from '../tools/local-service.js';
+import { releaseFromFiles, withLocalService } from '../tools/local-service.ts';
 
 /**
  * The example app's catalogs plus a draft French locale with one translated message, released

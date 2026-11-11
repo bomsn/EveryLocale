@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { SqliteStore } from '../packages/store/dist/index.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
 import { projectSchema, unitSchema } from '../packages/core/dist/index.js';
-import { recordingLog } from './support/log.js';
+import { recordingLog } from './support/log.ts';
 
 const log = recordingLog();
 

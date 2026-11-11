@@ -2,10 +2,25 @@
   "name": "@everylocale/runtime",
   "version": "0.3.0",
   "description": "Framework-free formatting of approved, precompiled EveryLocale messages, and verified release loading on the server.",
+  "keywords": [
+    "localization",
+    "i18n",
+    "translation",
+    "icu",
+    "everylocale"
+  ],
+  "homepage": "https://github.com/bomsn/EveryLocale#readme",
+  "bugs": "https://github.com/bomsn/EveryLocale/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bomsn/EveryLocale.git",
+    "directory": "packages/runtime"
+  },
   "type": "module",
   "license": "MIT",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "sideEffects": false,
   "exports": {
@@ -23,7 +38,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -31,5 +46,11 @@
     "@formatjs/icu-messageformat-parser": "3.5.23",
     "intl-messageformat": "12.1.5",
     "zod": "4.6.7"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

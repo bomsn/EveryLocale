@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { run } from './process.js';
+import { run } from './process.ts';
 
 /**
  * The root test run uses React 18 and React Router 7. This runs the React and React Router
@@ -19,7 +19,7 @@ for (const combination of combinations) {
     EVERYLOCALE_MATRIX_ROOT: root,
     EVERYLOCALE_MATRIX_ROUTER: combination.router,
   };
-  const hooks = ['--import', 'tsx', '--import', './tests/support/matrix.ts'];
+  const hooks = ['--experimental-strip-types', '--import', './tests/support/matrix.ts'];
   // Fails the run if the hooks did not take effect, so a silent fallback cannot pass.
   const probe = [
     "const { version } = await import('react');",

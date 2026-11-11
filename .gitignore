@@ -32,3 +32,4 @@ packages/react/flags/
 build/
 playwright-report/
 blob-report/
+coverage/

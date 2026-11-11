@@ -10,7 +10,7 @@ import { SqliteStore } from '../packages/store/dist/index.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
 import { BackupScheduler } from '../packages/server/dist/backups.js';
 import { projectSchema, unitSchema, FAILURES } from '../packages/core/dist/index.js';
-import { recordingLog } from './support/log.js';
+import { recordingLog } from './support/log.ts';
 
 async function waitFor(check: () => boolean) {
   const deadline = Date.now() + 15000;

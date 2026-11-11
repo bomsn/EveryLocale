@@ -1,4 +1,4 @@
-import { releaseVersion, run, runPnpm } from './process.js';
+import { releaseVersion, run, runPnpm } from './process.ts';
 
 await run('docker', ['info', '--format', '{{.OSType}}']);
 await runPnpm(['ci:host']);

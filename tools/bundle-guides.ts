@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { posix } from 'node:path';
 import { documentPreview } from '../packages/core/dist/preview.js';
-import { releaseVersion } from './process.js';
+import { releaseVersion } from './process.ts';
 
 const destination = 'packages/server/public/guides';
 const version = releaseVersion();

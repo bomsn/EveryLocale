@@ -11,3 +11,4 @@ packages/server/public/flags/
 pnpm-lock.yaml
 # Written by everylocale codegen, which owns its formatting.
 everylocale.generated.d.ts
+coverage/

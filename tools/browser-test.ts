@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseAppConfig } from '../packages/core/dist/config.js';
-import { releaseFromFiles, withLocalService } from './local-service.js';
-import { runPnpm } from './process.js';
+import { releaseFromFiles, withLocalService } from './local-service.ts';
+import { runPnpm } from './process.ts';
 
 /**
  * Prepares and drives the React Router example the way an app team would. The real service

@@ -1,14 +1,30 @@
 {
   "name": "@everylocale/server",
   "version": "0.3.0",
+  "description": "The self-hosted EveryLocale service: HTTP API, translation worker, review workspace and backups.",
+  "keywords": [
+    "localization",
+    "i18n",
+    "translation",
+    "icu",
+    "everylocale"
+  ],
+  "homepage": "https://github.com/bomsn/EveryLocale#readme",
+  "bugs": "https://github.com/bomsn/EveryLocale/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bomsn/EveryLocale.git",
+    "directory": "packages/server"
+  },
   "type": "module",
   "license": "MIT",
   "files": [
     "dist",
-    "public"
+    "public",
+    "src"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node --env-file-if-exists=../../.env dist/main.js",
     "dev": "tsx --env-file-if-exists=../../.env src/main.ts"
@@ -20,5 +36,11 @@
     "@fastify/static": "10.1.10",
     "fastify": "5.12.8",
     "zod": "4.6.7"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

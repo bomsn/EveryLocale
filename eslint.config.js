@@ -14,6 +14,7 @@ export default tseslint.config(
       'artifacts/**',
       'data/**',
       'test-results/**',
+      'coverage/**',
       'docs/**',
       'packages/react/flags/**',
       'tools/import-benchmark.ts',

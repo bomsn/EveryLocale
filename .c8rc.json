@@ -1,0 +1,14 @@
+{
+  "all": true,
+  "src": ["packages"],
+  "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
+  "exclude": ["**/*.d.ts", "**/node_modules/**"],
+  "excludeAfterRemap": true,
+  "reporter": ["text-summary", "lcov"],
+  "reportsDirectory": "coverage",
+  "check-coverage": true,
+  "statements": 92,
+  "branches": 81,
+  "functions": 93,
+  "lines": 92
+}

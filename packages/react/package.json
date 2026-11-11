@@ -1,12 +1,28 @@
 {
   "name": "@everylocale/react",
   "version": "0.3.0",
+  "description": "React bindings for EveryLocale: a provider, typed messages, and accessible language links, select and suggestion.",
+  "keywords": [
+    "localization",
+    "i18n",
+    "translation",
+    "icu",
+    "everylocale"
+  ],
+  "homepage": "https://github.com/bomsn/EveryLocale#readme",
+  "bugs": "https://github.com/bomsn/EveryLocale/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bomsn/EveryLocale.git",
+    "directory": "packages/react"
+  },
   "type": "module",
   "license": "MIT",
   "files": [
     "dist",
     "assets",
-    "flags"
+    "flags",
+    "src"
   ],
   "exports": {
     ".": {
@@ -21,7 +37,7 @@
     "./fonts/*": "./assets/fonts/*"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -42,5 +58,11 @@
     "@types/react": {
       "optional": true
     }
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

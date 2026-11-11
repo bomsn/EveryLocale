@@ -8,7 +8,7 @@ import {
   unknownFormats,
   pluralCategories,
 } from '../packages/core/dist/index.js';
-import { CONFIG_SCHEMA_PATH, configSchemaText } from '../tools/config-schema.js';
+import { CONFIG_SCHEMA_PATH, configSchemaText } from '../tools/config-schema.ts';
 
 const valid = {
   version: 1,

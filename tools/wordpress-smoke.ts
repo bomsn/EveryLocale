@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import type { TranslationRecord } from '../packages/core/dist/index.js';
-import { releaseVersion } from './process.js';
+import { releaseVersion } from './process.ts';
 
 const compose = ['compose', '-p', 'everylocale-smoke', '-f', 'tests/wordpress/compose.yaml'];
 const admin = 'disposable-owner-token-32-characters-long';

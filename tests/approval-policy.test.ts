@@ -5,7 +5,7 @@ import { SqliteStore } from '../packages/store/dist/index.js';
 import { projectSchema, unitSchema, type Finding, policyFor } from '../packages/core/dist/index.js';
 import { createApp } from '../packages/server/dist/app.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
-import { recordingLog } from './support/log.js';
+import { recordingLog } from './support/log.ts';
 
 const log = recordingLog();
 

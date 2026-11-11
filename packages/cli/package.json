@@ -1,16 +1,32 @@
 {
   "name": "@everylocale/cli",
   "version": "0.3.0",
+  "description": "The everylocale command: sync sources, pull verified releases, import translations, generate message types and check releases offline.",
+  "keywords": [
+    "localization",
+    "i18n",
+    "translation",
+    "icu",
+    "everylocale"
+  ],
+  "homepage": "https://github.com/bomsn/EveryLocale#readme",
+  "bugs": "https://github.com/bomsn/EveryLocale/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bomsn/EveryLocale.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "license": "MIT",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "bin": {
     "everylocale": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -18,5 +34,11 @@
     "typescript": "5.9.3",
     "@everylocale/runtime": "workspace:*",
     "@formatjs/icu-messageformat-parser": "3.5.23"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
