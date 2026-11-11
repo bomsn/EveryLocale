@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useSyncExternalStore } from 'react';
-import { languageSuggestion, type LocaleDefinition } from '@everylocale/core/locales';
+import { languageSuggestion, type LocaleDefinition } from '@everylocale/runtime';
 
 const subscribeToLanguages = (onChange: () => void) => {
   window.addEventListener('languagechange', onChange);

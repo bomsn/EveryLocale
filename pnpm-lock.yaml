@@ -23,6 +23,9 @@ importers:
       '@types/react-dom':
         specifier: 18.3.7
         version: 18.3.7(@types/react@18.3.28)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       eslint:
         specifier: 9.39.5
         version: 9.39.5(jiti@2.7.0)
@@ -68,6 +71,9 @@ importers:
       '@everylocale/react':
         specifier: workspace:*
         version: link:../../packages/react
+      '@everylocale/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       next:
         specifier: 16.4.6
         version: 16.4.6(@babel/core@7.29.13)(@types/node@24.10.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -163,12 +169,9 @@ importers:
 
   packages/react:
     dependencies:
-      '@everylocale/core':
+      '@everylocale/runtime':
         specifier: workspace:*
-        version: link:../core
-      react-intl:
-        specifier: 12.1.7
-        version: 12.1.7(@types/react@18.3.28)(react@18.3.1)
+        version: link:../runtime
     devDependencies:
       '@types/react':
         specifier: 18.3.28
@@ -611,9 +614,6 @@ packages:
 
   '@formatjs/icu-skeleton-parser@2.1.13':
     resolution: {integrity: sha512-IdAJ9NrHn7AF0zqncD9UpxQozTYyJtbwwrZnJMEKVxTcOOXtVkUb2XYTpNOGTAv58NCsk0rjRB9G+i2SvBmGAQ==}
-
-  '@formatjs/intl@6.1.5':
-    resolution: {integrity: sha512-WicSXzsz4wO1ksJb6Pp9a+vdOpIkidcEm8ldVtXkqFoMB/o/ETEikyPeCFgTVuSTLBb7ZNJ3ZLKXSQ/X/0+BAg==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2378,12 +2378,6 @@ packages:
     peerDependencies:
       react: ^19.2.0
 
-  react-intl@12.1.7:
-    resolution: {integrity: sha512-DKPrDYGQfQpyW8g8dbEPd6abvinwHPw85LcAT6nmd8+kzexea5egLQu6KZTEGDgP+3ap8dn+sX3JTuS7v0xD4g==}
-    peerDependencies:
-      '@types/react': '>=18.0.0'
-      react: '>=18.0.0'
-
   react@18.3.1:
     resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}
     engines: {node: '>=0.10.0'}
@@ -3205,12 +3199,6 @@ snapshots:
       '@formatjs/icu-skeleton-parser': 2.1.13
 
   '@formatjs/icu-skeleton-parser@2.1.13': {}
-
-  '@formatjs/intl@6.1.5':
-    dependencies:
-      '@formatjs/fast-memoize': 3.1.7
-      '@formatjs/icu-messageformat-parser': 3.5.23
-      intl-messageformat: 12.1.5
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -5246,14 +5234,6 @@ snapshots:
     dependencies:
       react: 19.2.0
       scheduler: 0.27.0
-
-  react-intl@12.1.7(@types/react@18.3.28)(react@18.3.1):
-    dependencies:
-      '@formatjs/icu-messageformat-parser': 3.5.23
-      '@formatjs/intl': 6.1.5
-      '@types/react': 18.3.28
-      intl-messageformat: 12.1.5
-      react: 18.3.1
 
   react@18.3.1:
     dependencies:

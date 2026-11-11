@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { nextMetadata, resolveRequest } from '@everylocale/adapters';
+import { compileMessage } from '@everylocale/core';
 import { EveryLocaleProvider, Message, LanguageLinks, LocaleFlag } from '@everylocale/react';
 import tw from '@everylocale/react/flags/tw';
 import { locales } from '../locales';
@@ -38,14 +39,11 @@ export default async function Page({ params }: { params: Promise<{ segments?: st
     <main lang={selected.locale} dir={selected.direction}>
       <h1>{page.title}</h1>
       <EveryLocaleProvider
-        catalog={{
-          locale: selected.locale,
-          revision: 'approved-fixture',
-          messages: { greeting: page.message },
-        }}
+        locale={selected.locale}
+        messages={{ 'about:greeting': compileMessage('icu', page.message) }}
       >
         <p>
-          <Message id="greeting" values={{ name: 'Ali' }} />
+          <Message id="about:greeting" values={{ name: 'Ali' }} />
         </p>
         <LocaleFlag locale={selected.locale} flags={{ tw }} />
       </EveryLocaleProvider>

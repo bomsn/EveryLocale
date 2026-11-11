@@ -25,12 +25,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@everylocale/core": "workspace:*",
-    "react-intl": "12.1.7"
+    "@everylocale/runtime": "workspace:*"
   },
   "peerDependencies": {
-    "@types/react": ">=18",
-    "react": ">=18"
+    "react": ">=18.3 <20",
+    "@types/react": ">=18.3 <20"
   },
   "devDependencies": {
     "@types/react": "18.3.28",
@@ -38,5 +37,10 @@
   },
   "sideEffects": [
     "./assets/*.css"
-  ]
+  ],
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  }
 }

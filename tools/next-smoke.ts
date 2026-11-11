@@ -20,11 +20,14 @@ try {
     dependencies: Record<string, string>;
     pnpm?: unknown;
   };
-  for (const name of ['core', 'adapters', 'react'])
+  for (const name of ['core', 'runtime', 'adapters', 'react'])
     manifest.dependencies[`@everylocale/${name}`] =
       'file:' + resolve(`artifacts/everylocale-${name}-${version}.tgz`).replaceAll('\\', '/');
   manifest.pnpm = {
-    overrides: { '@everylocale/core': manifest.dependencies['@everylocale/core'] },
+    overrides: {
+      '@everylocale/core': manifest.dependencies['@everylocale/core'],
+      '@everylocale/runtime': manifest.dependencies['@everylocale/runtime'],
+    },
   };
   await writeFile(join(directory, 'package.json'), JSON.stringify(manifest, null, 2));
   await run(['install', '--ignore-workspace']);

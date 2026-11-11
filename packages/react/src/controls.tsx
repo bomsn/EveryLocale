@@ -1,5 +1,5 @@
 import { useId, type FormEvent } from 'react';
-import { flagCountry, type LocaleDefinition } from '@everylocale/core/locales';
+import { flagCountry, type LocaleDefinition } from '@everylocale/runtime';
 
 /** Flag markup by lower-case ISO country code, from `@everylocale/react/flags/<code>`. */
 export type FlagSet = Readonly<Partial<Record<string, string>>>;

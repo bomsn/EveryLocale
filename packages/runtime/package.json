@@ -16,6 +16,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
+    },
+    "./bundler": {
+      "types": "./dist/bundler.d.ts",
+      "import": "./dist/bundler.js"
     }
   },
   "scripts": {

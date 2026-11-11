@@ -14,7 +14,8 @@
     "react-dom": "19.2.0",
     "@everylocale/core": "workspace:*",
     "@everylocale/adapters": "workspace:*",
-    "@everylocale/react": "workspace:*"
+    "@everylocale/react": "workspace:*",
+    "@everylocale/runtime": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3",

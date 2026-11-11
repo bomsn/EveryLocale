@@ -12,7 +12,7 @@ import {
 } from '../packages/react/dist/index.js';
 import tw from '../packages/react/flags/tw.js';
 import { resolveRequest, PublishedRegistry } from '../packages/adapters/dist/index.js';
-import { defineLocales } from '../packages/core/dist/index.js';
+import { compileMessage, defineLocales } from '../packages/core/dist/index.js';
 
 const locales = defineLocales('en', [
   'ar',
@@ -76,7 +76,8 @@ function render(url: string) {
         'body',
         null,
         h(EveryLocaleProvider, {
-          catalog: { locale: selected.locale, revision: 'fixture', messages: { hello: message } },
+          locale: selected.locale,
+          messages: { hello: compileMessage('icu', message) },
           children: h('h1', null, h(Message, { id: 'hello', values: { name: 'Ali' } })),
         }),
       ),

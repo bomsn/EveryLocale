@@ -12,6 +12,7 @@ export type {
   MessageValues,
   Register,
   Tag,
+  TypedMessages,
   ValuesArgument,
 } from './messages.js';
 export {

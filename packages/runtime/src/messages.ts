@@ -22,7 +22,14 @@ type Catalog = [Registered] extends [never] ? Untyped : Registered;
 
 export type MessageId = Extract<keyof Catalog, string>;
 export type MessageValues<Id extends MessageId> = Catalog[Id];
-/** Messages without arguments take no values; the others require theirs. */
-export type ValuesArgument<Id extends MessageId> = [MessageValues<Id>] extends [undefined]
-  ? [values?: undefined]
-  : [values: MessageValues<Id>];
+/** True once generated declarations register the app's messages. */
+export type TypedMessages = [Registered] extends [never] ? false : true;
+/**
+ * With generated types, messages without arguments take no values and the others require
+ * theirs. Without them, values are optional and untyped.
+ */
+export type ValuesArgument<Id extends MessageId> = TypedMessages extends false
+  ? [values?: Record<string, unknown>]
+  : [MessageValues<Id>] extends [undefined]
+    ? [values?: undefined]
+    : [values: MessageValues<Id>];

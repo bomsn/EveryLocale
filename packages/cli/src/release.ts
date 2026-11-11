@@ -1,9 +1,10 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { parse, TYPE, type MessageFormatElement } from '@formatjs/icu-messageformat-parser';
+import type { MessageFormatElement } from '@formatjs/icu-messageformat-parser';
 import {
   catalogBundleSchema,
+  compileMessage,
   sourceHash,
   type ApprovedCatalog,
   type CatalogBundle,
@@ -30,10 +31,6 @@ export async function atomicWrite(path: string, content: string) {
   await rename(temporary, path);
 }
 
-/** ICU messages are parsed; plain text segments become one literal, so braces stay text. */
-function compile(unit: SourceUnit, text: string): MessageFormatElement[] {
-  return unit.kind === 'icu' ? parse(text) : [{ type: TYPE.literal, value: text }];
-}
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 
 export type SourceDocuments = Map<SourceFile, SourceUnit[]>;
@@ -102,7 +99,7 @@ export async function writeRelease(
         }
         entry.messages[unit.id] = text;
         entry.sources[unit.id] = sourceHash(unit);
-        if (kind === 'messages') compiled[unit.id] = compile(unit, text);
+        if (kind === 'messages') compiled[unit.id] = compileMessage(unit.kind, text);
       }
       put(catalogPath(locale, namespace), entry);
       if (kind === 'messages') put(catalogPath(locale, namespace, true), compiled);
