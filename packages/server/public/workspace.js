@@ -934,7 +934,7 @@ function renderIntegration() {
     cli: {
       title: 'Your files. A repeatable workflow.',
       description:
-        'Describe your files once, then run the CLI from your build or CI with EVERYLOCALE_URL and a scoped EVERYLOCALE_TOKEN. Install the packages from pnpm release:pack as the setup guide describes.',
+        'Describe your files once, then run the CLI from your build or CI with EVERYLOCALE_URL and a scoped EVERYLOCALE_TOKEN. Install it with npm install --save-dev @everylocale/cli.',
       steps: [
         [
           'Describe your files',
@@ -996,7 +996,7 @@ function renderIntegration() {
       steps: [
         [
           'Install and pull a release',
-          'Install the cli, runtime, react and react-router archives from pnpm release:pack, then pull a release as in Files & CLI.',
+          'Run npm install @everylocale/react-router @everylocale/react @everylocale/runtime, then pull a release as in Files & CLI.',
         ],
         [
           'Resolve the locale in the root loader',
@@ -1017,7 +1017,7 @@ function renderIntegration() {
       steps: [
         [
           'Install and pull a release',
-          'Install the cli, runtime, react and adapters archives from pnpm release:pack, then pull a release as in Files & CLI.',
+          'Run npm install @everylocale/react @everylocale/adapters @everylocale/runtime, then pull a release as in Files & CLI.',
         ],
         [
           'Load approved words on the server',

@@ -12,6 +12,11 @@ const version = releaseVersion();
 const directory = await mkdtemp(join(tmpdir(), 'everylocale-next-'));
 const fixture = resolve('examples/next');
 let child: ChildProcess | undefined;
+/**
+ * By default the consumer installs the archives `pnpm release:pack` wrote, before anything is
+ * published. With --registry it installs the released version from npm, as an app would.
+ */
+const fromRegistry = process.argv.includes('--registry');
 const nextEnv = { ...process.env, NEXT_TELEMETRY_DISABLED: '1' };
 const run = (args: string[]) => runPnpm(args, { cwd: directory, env: nextEnv });
 try {
@@ -28,15 +33,20 @@ try {
     dependencies: Record<string, string>;
     pnpm?: unknown;
   };
-  for (const name of ['core', 'runtime', 'adapters', 'react'])
-    manifest.dependencies[`@everylocale/${name}`] =
-      'file:' + resolve(`artifacts/everylocale-${name}-${version}.tgz`).replaceAll('\\', '/');
-  manifest.pnpm = {
-    overrides: {
-      '@everylocale/core': manifest.dependencies['@everylocale/core'],
-      '@everylocale/runtime': manifest.dependencies['@everylocale/runtime'],
-    },
-  };
+  if (fromRegistry)
+    for (const name of ['runtime', 'adapters', 'react'])
+      manifest.dependencies[`@everylocale/${name}`] = version;
+  else {
+    for (const name of ['core', 'runtime', 'adapters', 'react'])
+      manifest.dependencies[`@everylocale/${name}`] =
+        'file:' + resolve(`artifacts/everylocale-${name}-${version}.tgz`).replaceAll('\\', '/');
+    manifest.pnpm = {
+      overrides: {
+        '@everylocale/core': manifest.dependencies['@everylocale/core'],
+        '@everylocale/runtime': manifest.dependencies['@everylocale/runtime'],
+      },
+    };
+  }
   await writeFile(join(directory, 'package.json'), JSON.stringify(manifest, null, 2));
   await run(['install', '--ignore-workspace']);
   await run(['build']);

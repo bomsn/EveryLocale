@@ -26,3 +26,12 @@ GitHub Actions runs on `master` updates. Pushes and pull requests to `develop` d
 - Keep credentials, customer data, local databases and development notes out of commits.
 
 Public documentation describes installation, configuration, APIs and supported behavior. Keep planning notes and project-specific research outside the published documentation. See [the security policy](SECURITY.md) for reporting vulnerabilities and [the code of conduct](CODE_OF_CONDUCT.md) for participation.
+
+## Releasing
+
+Maintainers release from `develop` after `pnpm ci:local` passes on a clean checkout:
+
+1. `pnpm changeset version` collects the changesets into changelogs and sets the new version. Set the same version in the root and example `package.json` files, `compose.yaml` and the WordPress plugin header; a test checks they agree. Run `pnpm codegen` so `docs/openapi.json` carries it.
+2. `pnpm ci:local` on a clean clone. It builds the archives in `artifacts/` with `pnpm release:pack`.
+3. Publish those archives, dependencies first: `core`, `runtime`, `store`, `react`, `adapters`, `cli`, `react-router`, `server`, each with `npm publish artifacts/everylocale-NAME-VERSION.tgz --access public`. The npm account needs two-factor authentication, and npm asks for it on publish.
+4. `pnpm test:next:registry` installs the published packages from npm into the Next.js example and runs the consumer checks.

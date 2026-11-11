@@ -37,7 +37,8 @@
     "test:browser": "tsx tools/browser-test.ts",
     "test:matrix": "tsx tools/react-matrix.ts",
     "punctuation": "tsx tools/punctuation.ts",
-    "coverage": "c8 node --experimental-strip-types --test --test-concurrency=4 tests/*.test.ts"
+    "coverage": "c8 node --experimental-strip-types --test --test-concurrency=4 tests/*.test.ts",
+    "test:next:registry": "tsx tools/next-smoke.ts --registry"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",

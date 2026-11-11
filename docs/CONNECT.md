@@ -6,7 +6,7 @@ Your app uses approved translations that live in its own repository or build. Ev
 
 ## Install the packages
 
-Packages are installed from release archives. Run `pnpm release:pack` in the EveryLocale checkout; it writes one archive per package to `artifacts/`. Copy the ones you need into `vendor/` in your app.
+Every package is on npm under `@everylocale`, and all of them share one version. Install the CLI for your build, plus the runtime pieces your app uses:
 
 | Package | Use |
 | --- | --- |
@@ -15,27 +15,14 @@ Packages are installed from release archives. Run `pnpm release:pack` in the Eve
 | `@everylocale/react` | `EveryLocaleProvider`, `Message`, language links and select |
 | `@everylocale/react-router` | React Router 7 and 8 framework mode |
 | `@everylocale/adapters` | Request locale resolution, Next.js metadata, published-page registry, HTTP client |
-| `@everylocale/core` | Shared locale and config logic; a dependency of the others |
-
-Packages depend on each other, so pin `core` and `runtime` to the archives in your app's `package.json`. Replace `VERSION` with the version in EveryLocale's root `package.json`:
-
-```json
-{
-  "pnpm": {
-    "overrides": {
-      "@everylocale/core": "file:vendor/everylocale-core-VERSION.tgz",
-      "@everylocale/runtime": "file:vendor/everylocale-runtime-VERSION.tgz"
-    }
-  }
-}
-```
+| `@everylocale/core` | Shared locale and config logic; installed with the others |
 
 ```sh
-pnpm add -D ./vendor/everylocale-cli-VERSION.tgz
-pnpm add ./vendor/everylocale-core-VERSION.tgz ./vendor/everylocale-runtime-VERSION.tgz
+npm install --save-dev @everylocale/cli
+npm install @everylocale/runtime
 ```
 
-Add `react`, `react-router` or `adapters` the same way when you use them.
+A React Router app adds `@everylocale/react @everylocale/react-router`; a Next.js app adds `@everylocale/react @everylocale/adapters`. With pnpm or Yarn, use `pnpm add` or `yarn add` with the same names.
 
 ## Describe your files
 
