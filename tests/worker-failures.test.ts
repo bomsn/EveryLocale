@@ -4,6 +4,9 @@ import { createServer } from 'node:http';
 import { SqliteStore } from '../packages/store/dist/index.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
 import { projectSchema, unitSchema } from '../packages/core/dist/index.js';
+import { recordingLog } from './support/log.js';
+
+const log = recordingLog();
 
 async function waitFor(check: () => boolean) {
   const deadline = Date.now() + 18000;
@@ -52,12 +55,16 @@ test('real provider throttling retries safely, preserves charges, and leaves pub
   );
   store.importSources('retry', [unitSchema.parse({ id: 'hello', source: 'Hello' })]);
   const job = store.enqueue('retry', ['hello'], ['de'], 'retry')[0]!;
-  const worker = new TranslationWorker(store, {
-    generator: { ...provider, model: 'generator' },
-    reviewer: { ...provider, model: 'reviewer' },
-    concurrency: 2,
-    intervalMs: 0,
-  });
+  const worker = new TranslationWorker(
+    store,
+    {
+      generator: { ...provider, model: 'generator' },
+      reviewer: { ...provider, model: 'reviewer' },
+      concurrency: 2,
+      intervalMs: 0,
+    },
+    log,
+  );
   try {
     worker.start();
     await waitFor(() => store.getJob('retry', job.id).status === 'review');
@@ -101,12 +108,16 @@ test('malformed model JSON is charged once and exhausted budgets prevent provide
     store.importSources(id, [unitSchema.parse({ id: 'hello', source: 'Hello' })]);
     store.enqueue(id, ['hello'], ['de'], id);
   }
-  const worker = new TranslationWorker(store, {
-    generator: provider,
-    reviewer: provider,
-    concurrency: 2,
-    intervalMs: 0,
-  });
+  const worker = new TranslationWorker(
+    store,
+    {
+      generator: provider,
+      reviewer: provider,
+      concurrency: 2,
+      intervalMs: 0,
+    },
+    log,
+  );
   try {
     worker.start();
     await waitFor(() =>

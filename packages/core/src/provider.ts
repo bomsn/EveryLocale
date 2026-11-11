@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { FailureCode } from './failures.js';
 
 export type ProviderConfig = {
   baseUrl: string;
@@ -19,17 +20,33 @@ export type ModelResult = {
   inputTokens: number;
   outputTokens: number;
 };
+export type ProviderErrorOptions = {
+  failure: FailureCode;
+  /** The worker may try again later; the attempt counts toward the job's limit. */
+  retryable?: boolean;
+  retryAfterMs?: number;
+  /** The provider may have charged for a request whose usage is unknown. */
+  uncertainCost?: boolean;
+  /** A known charge for a request that still failed. */
+  costUsd?: number;
+};
 export class ProviderError extends Error {
-  constructor(
-    message: string,
-    public retryable = false,
-    public retryAfterMs = 0,
-    public uncertainCost = false,
-    public costUsd?: number,
-  ) {
+  readonly failure: FailureCode;
+  readonly retryable: boolean;
+  readonly retryAfterMs: number;
+  readonly uncertainCost: boolean;
+  readonly costUsd: number | undefined;
+  constructor(message: string, options: ProviderErrorOptions) {
     super(message);
+    this.failure = options.failure;
+    this.retryable = options.retryable ?? false;
+    this.retryAfterMs = options.retryAfterMs ?? 0;
+    this.uncertainCost = options.uncertainCost ?? false;
+    this.costUsd = options.costUsd;
   }
 }
+/** HTTP statuses that mean the key, account, permission or model is wrong for every request. */
+const CONFIGURATION_STATUSES: ReadonlySet<number> = new Set([401, 402, 403, 404]);
 const responseSchema = z.object({
   choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1),
   usage: z
@@ -106,10 +123,19 @@ export async function modelCall(
       }),
     });
   } catch {
-    throw new ProviderError('Provider request failed or timed out', true, 0, true);
+    throw new ProviderError('Provider request failed or timed out', {
+      failure: 'provider_unavailable',
+      retryable: true,
+      uncertainCost: true,
+    });
   }
   if (!response.ok) {
     const retry = response.status === 429 || response.status >= 500;
+    const failure: FailureCode = retry
+      ? 'provider_unavailable'
+      : CONFIGURATION_STATUSES.has(response.status)
+        ? 'provider_configuration'
+        : 'provider_rejected';
     const retryHeader = response.headers.get('retry-after');
     const seconds = retryHeader === null ? NaN : Number(retryHeader);
     const delay = Number.isFinite(seconds)
@@ -118,12 +144,12 @@ export async function modelCall(
         ? Date.parse(retryHeader) - Date.now()
         : 0;
     await response.body?.cancel();
-    throw new ProviderError(
-      `Provider returned HTTP ${response.status}`,
-      retry,
-      Number.isFinite(delay) ? Math.max(0, Math.min(delay, 300000)) : 0,
-      response.status >= 500,
-    );
+    throw new ProviderError(`Provider returned HTTP ${response.status}`, {
+      failure,
+      retryable: retry,
+      retryAfterMs: Number.isFinite(delay) ? Math.max(0, Math.min(delay, 300000)) : 0,
+      uncertainCost: response.status >= 500,
+    });
   }
   const reader = response.body?.getReader();
   const chunks: Uint8Array[] = [];
@@ -136,29 +162,49 @@ export async function modelCall(
         size += next.value.byteLength;
         if (size > 1000000) {
           await reader.cancel();
-          throw new ProviderError('Provider response exceeds size limit', false, 0, true);
+          throw new ProviderError('Provider response exceeds size limit', {
+            failure: 'provider_response',
+            uncertainCost: true,
+          });
         }
         chunks.push(next.value);
       }
   } catch (error) {
     if (error instanceof ProviderError) throw error;
-    throw new ProviderError('Provider response interrupted', true, 0, true);
+    throw new ProviderError('Provider response interrupted', {
+      failure: 'provider_unavailable',
+      retryable: true,
+      uncertainCost: true,
+    });
   }
   const raw = Buffer.concat(chunks).toString('utf8');
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new ProviderError('Provider returned invalid response JSON', false, 0, true);
+    throw new ProviderError('Provider returned invalid response JSON', {
+      failure: 'provider_response',
+      uncertainCost: true,
+    });
   }
   const decoded = responseSchema.safeParse(parsed);
   if (!decoded.success)
-    throw new ProviderError('Provider returned an unsupported response shape', false, 0, true);
+    throw new ProviderError('Provider returned an unsupported response shape', {
+      failure: 'provider_response',
+      uncertainCost: true,
+    });
   const usage = decoded.data.usage;
   if (!usage && (config.inputPrice > 0 || config.outputPrice > 0))
-    throw new ProviderError('Metered provider did not return usage', false, 0, true);
+    throw new ProviderError('Metered provider did not return usage', {
+      failure: 'provider_response',
+      uncertainCost: true,
+    });
   const [choice] = decoded.data.choices;
-  if (!choice) throw new ProviderError('Provider returned no choices', false, 0, true);
+  if (!choice)
+    throw new ProviderError('Provider returned no choices', {
+      failure: 'provider_response',
+      uncertainCost: true,
+    });
   const content = choice.message.content;
   let value: unknown;
   const costUsd = usage
@@ -167,7 +213,10 @@ export async function modelCall(
   try {
     value = JSON.parse(content);
   } catch {
-    throw new ProviderError('Model returned invalid JSON', false, 0, false, costUsd);
+    throw new ProviderError('Model returned invalid JSON', {
+      failure: 'model_output_invalid',
+      costUsd,
+    });
   }
   const result = {
     value,

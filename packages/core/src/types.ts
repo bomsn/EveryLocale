@@ -107,6 +107,8 @@ export type TranslationRecord = {
   error: string | null;
   costUsd: number;
   approvalRevision: number | null;
+  /** Why the job failed or last needed a retry; see FAILURES. */
+  failure: import('./failures.js').FailureCode | null;
 };
 export type ApprovedCatalog = {
   schemaVersion: 1;

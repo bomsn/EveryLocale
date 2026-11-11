@@ -432,13 +432,35 @@ function renderOverview() {
   const service = state.operations?.projects.find((project) => project.id === state.project?.id);
   const dead = state.operations?.delivery.dead ?? 0;
   const stalled = service?.oldestPendingAt && Date.now() - service.oldestPendingAt > 900000;
-  operations.hidden = !(service?.failed || dead || stalled);
+  const paused = state.operations?.providers?.paused ?? null;
+  operations.hidden = !(service?.failed || dead || stalled || paused);
   if (!operations.hidden) {
     const copy = element('div');
     const heading = element('h2', 'Some work needs attention');
     heading.id = 'operations-title';
+    copy.append(heading);
+    if (paused) {
+      copy.append(
+        element(
+          'p',
+          'Translation is paused because the model provider rejected the request: ' +
+            paused.message +
+            '. Queued work is kept. Fix the provider settings and restart the service, or resume once the provider accepts requests again.',
+        ),
+      );
+      if (state.session?.owner) {
+        const resume = actionButton('Resume translation', 'text-button', 'refresh');
+        resume.addEventListener('click', () =>
+          guarded(async () => {
+            await api('/providers/resume', 'POST', {});
+            await refresh();
+            notify('Translation resumed.');
+          }),
+        );
+        copy.append(resume);
+      }
+    }
     copy.append(
-      heading,
       element(
         'p',
         `${service?.failed ?? 0} failed translations. ${dead} notifications need a delivery retry.${stalled ? ' Some translations have been queued for more than 15 minutes.' : ''}`,

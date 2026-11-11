@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, rm, chmod } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { ContractError } from '@everylocale/core';
+import { ContractError, FAILURES, type FailureCode } from '@everylocale/core';
 import { decodeDetail } from './decode.js';
 
 export type DeliveryEvent = {
@@ -35,6 +35,7 @@ export interface DeliveryStore {
   retryDelivery(id: string): void;
   deliveryEvents(project?: string): Array<DeliveryEvent & { status: string; error: string | null }>;
   backup(path: string): Promise<void>;
+  recordAlert(type: string, detail: Record<string, unknown>): void;
 }
 type Row = {
   id: string;
@@ -57,6 +58,9 @@ const event = (row: Row): DeliveryEvent => ({
   attempts: row.attempts,
 });
 
+/** Unresolved conditions repeat at most this often, including across restarts. */
+const ALERT_INTERVAL_MS = 3600000;
+
 /** Events are committed with their publication or exception so a crash cannot lose delivery. */
 export const deliveryMethods = {
   /** Repeat unresolved health alerts at most hourly, including after a service restart. */
@@ -73,7 +77,7 @@ export const deliveryMethods = {
             .prepare(
               'SELECT 1 FROM delivery_events WHERE project_id=? AND type=? AND created_at>? LIMIT 1',
             )
-            .get(project.id, type, now - 3600000);
+            .get(project.id, type, now - ALERT_INTERVAL_MS);
           if (!recent)
             deliveryMethods.emit(db, now, project.id, type, project.id, {
               pending: project.pending,
@@ -81,7 +85,52 @@ export const deliveryMethods = {
             });
         }
       }
+      deliveryMethods.failureAlerts(db, now);
     }).immediate();
+  },
+  /**
+   * One alert per project and failure cause, at most hourly, counting the failures since the
+   * previous alert for that cause. A configuration mistake that fails a thousand jobs sends
+   * one event, not a thousand.
+   */
+  failureAlerts(db: Database.Database, now: number) {
+    const groups = db
+      .prepare(
+        "SELECT DISTINCT project_id AS projectId, failure FROM jobs WHERE status='failed' AND failure IS NOT NULL",
+      )
+      .all() as Array<{ projectId: string; failure: FailureCode }>;
+    for (const { projectId, failure } of groups) {
+      const type =
+        failure === 'budget_exhausted' ? 'alert.budget_exhausted' : 'alert.translation_failed';
+      const last = (
+        db
+          .prepare(
+            "SELECT MAX(created_at) AS at FROM delivery_events WHERE project_id=? AND type=? AND json_extract(detail,'$.failure')=?",
+          )
+          .get(projectId, type, failure) as { at: number | null }
+      ).at;
+      if (last !== null && now - last < ALERT_INTERVAL_MS) continue;
+      const since = last ?? 0;
+      const { count } = db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM jobs WHERE project_id=? AND status='failed' AND failure=? AND failed_at>?",
+        )
+        .get(projectId, failure, since) as { count: number };
+      if (!count) continue;
+      const examples = (
+        db
+          .prepare(
+            "SELECT id FROM jobs WHERE project_id=? AND status='failed' AND failure=? AND failed_at>? ORDER BY failed_at DESC LIMIT 5",
+          )
+          .all(projectId, failure, since) as Array<{ id: string }>
+      ).map((row) => row.id);
+      deliveryMethods.emit(db, now, projectId, type, projectId, {
+        failure,
+        count,
+        examples,
+        action: FAILURES[failure].action,
+      });
+    }
   },
   emit(
     db: Database.Database,

@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type {
+  FailureCode,
   ApprovedCatalog,
   Finding,
   Project,
@@ -10,6 +11,7 @@ import type {
 } from '@everylocale/core';
 import { migrate, schemaVersion, type MigrationResult } from './migrations.js';
 export { SCHEMA_VERSION, type MigrationResult } from './migrations.js';
+export { verifyDatabase, type DatabaseCheck } from './verify.js';
 import type { JobRow, SourceRow } from './rows.js';
 import * as projects from './projects.js';
 import * as sources from './sources.js';
@@ -21,6 +23,8 @@ import * as sessions from './sessions.js';
 export type { Session } from './sessions.js';
 import type { Scope } from './decode.js';
 import type { ImportResult } from './approvals.js';
+import type { RequestStatus } from './jobs.js';
+export type { RequestStatus } from './jobs.js';
 import type { TokenIdentity, TokenLimits } from './access.js';
 export { withinLimits, type TokenIdentity, type TokenLimits } from './access.js';
 export type { ImportResult } from './approvals.js';
@@ -85,9 +89,9 @@ export interface TranslationStore {
   fail(
     id: string,
     leaseToken: string,
+    failure: FailureCode,
     message: string,
-    retryAfterMs?: number,
-    uncertainCost?: boolean,
+    options?: { retryAfterMs?: number; uncertainCost?: boolean; requeue?: boolean },
   ): void;
   approve(
     projectId: string,
@@ -148,6 +152,7 @@ export interface LocalizationStore extends TranslationStore, DeliveryStore {
     filters?: JobFilters,
   ): { records: TranslationRecord[]; cursor: number | null };
   summary(project: string): ProjectSummary;
+  requestStatus(project: string, key: string): RequestStatus;
   edit(project: string, id: string, revision: number, translation: string, actor: string): void;
   importTranslations(
     project: string,
@@ -213,6 +218,10 @@ export class SqliteStore implements LocalizationStore {
   readonly retryDelivery = (id: string) => deliveryMethods.retry(this.db, this.now(), id);
   readonly deliveryEvents = (project?: string) => deliveryMethods.events(this.db, project);
   readonly backup = (path: string) => deliveryMethods.backup(this.db, path);
+  /** A service-level alert, such as a failed backup, delivered like any other event. */
+  readonly recordAlert = (type: string, detail: Record<string, unknown>) => {
+    deliveryMethods.emit(this.db, this.now(), '*', type, '*', detail);
+  };
   readonly db: Database.Database;
   /** The schema upgrade this process applied on open, including the pre-upgrade backup path. */
   readonly migration: MigrationResult;
@@ -317,6 +326,9 @@ export class SqliteStore implements LocalizationStore {
     return sources.currentSources(this, projectId);
   }
   /** Coverage counts the current source and guidance, while previous publications stay live. */
+  requestStatus(projectId: string, key: string): RequestStatus {
+    return jobs.requestStatus(this, projectId, key);
+  }
   summary(projectId: string): ProjectSummary {
     return jobs.summary(this, projectId);
   }
@@ -351,8 +363,14 @@ export class SqliteStore implements LocalizationStore {
   approveAutomatically(project: Project, id: string) {
     approvals.approveAutomatically(this, project, id);
   }
-  fail(id: string, token: string, message: string, retryAfterMs?: number, uncertainCost = false) {
-    jobs.fail(this, id, token, message, retryAfterMs, uncertainCost);
+  fail(
+    id: string,
+    token: string,
+    failure: FailureCode,
+    message: string,
+    options?: { retryAfterMs?: number; uncertainCost?: boolean; requeue?: boolean },
+  ) {
+    jobs.fail(this, id, token, failure, message, options);
   }
   edit(projectId: string, id: string, revision: number, translation: string, actor: string) {
     approvals.edit(this, projectId, id, revision, translation, actor);

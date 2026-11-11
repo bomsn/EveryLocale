@@ -9,6 +9,9 @@ import { SqliteStore } from '../packages/store/dist/index.js';
 import { createApp } from '../packages/server/dist/app.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
 import { projectSchema, unitSchema, type SourceUnit } from '../packages/core/dist/index.js';
+import { recordingLog } from './support/log.js';
+
+const log = recordingLog();
 
 test('CLI extraction and approved rendering preserve a non-English source revision', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'everylocale-source-locale-'));
@@ -144,12 +147,16 @@ test('real HTTP provider transport, durable worker, owner approval and CLI expor
   await app.listen({ host: '127.0.0.1', port: 0 });
   const port = (app.server.address() as { port: number }).port;
   const config = { baseUrl: `http://127.0.0.1:${providerPort}/v1`, inputPrice: 1, outputPrice: 1 };
-  const worker = new TranslationWorker(store, {
-    generator: { ...config, model: 'generator' },
-    reviewer: { ...config, model: 'reviewer' },
-    concurrency: 2,
-    intervalMs: 0,
-  });
+  const worker = new TranslationWorker(
+    store,
+    {
+      generator: { ...config, model: 'generator' },
+      reviewer: { ...config, model: 'reviewer' },
+      concurrency: 2,
+      intervalMs: 0,
+    },
+    log,
+  );
   try {
     const headers = { authorization: `Bearer ${admin}` };
     const project = projectSchema.parse({

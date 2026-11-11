@@ -1,5 +1,6 @@
 import {
   contextHash,
+  type FailureCode,
   type Project,
   type SourceUnit,
   type TranslationRecord,
@@ -26,6 +27,7 @@ export type JobRow = {
   approval_revision: number | null;
   lease_token: string | null;
   lease_until: number | null;
+  failure: FailureCode | null;
 };
 export type SourceRow = { data: string; source_hash: string; active: number };
 export type PublicationRow = { unit_id: string; translation: string; source_hash: string };
@@ -48,6 +50,7 @@ export function record(row: JobRow): TranslationRecord {
     error: row.error,
     costUsd: row.cost,
     approvalRevision: row.approval_revision,
+    failure: row.failure,
   };
 }
 

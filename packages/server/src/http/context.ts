@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { LocalizationStore } from '@everylocale/store';
 import type { ChatGptConnection } from '../chatgpt.js';
+import type { ProviderPause } from '../worker.js';
 import type { Auth } from './auth.js';
 
 export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'silent'] as const;
@@ -17,6 +18,11 @@ export type AppConfig = {
   /** Proxy addresses or CIDR ranges whose forwarded client address is trusted; false trusts none. */
   trustProxy: string | false;
   connection?: ChatGptConnection;
+  /** Pause status and resume control of the translation worker, when providers are configured. */
+  providers?: {
+    status(): { paused: ProviderPause | null } | null;
+    resume(): void;
+  };
 };
 
 export type RouteContext = {

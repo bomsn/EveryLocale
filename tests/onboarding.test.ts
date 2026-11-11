@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
+import { existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -11,6 +13,9 @@ import { EveryLocaleClient } from '../packages/adapters/dist/index.js';
 import { createApp } from '../packages/server/dist/app.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
 import { databasePath } from '../packages/server/dist/paths.js';
+import { recordingLog } from './support/log.js';
+
+const log = recordingLog();
 
 async function command(file: string, args: string[], env: Record<string, string> = {}) {
   return new Promise<{ code: number | null; output: string }>((done, reject) => {
@@ -61,6 +66,25 @@ test('configuration checks and maintenance use the service database without mode
     assert.equal(configured.code, 0, configured.output);
     assert.match(configured.output, /No model request was sent/);
     assert.doesNotMatch(configured.output, /private-owner|private-session/);
+    assert.equal(
+      existsSync(join(directory, 'service.sqlite')),
+      false,
+      'the doctor creates nothing',
+    );
+    const legacy = join(directory, 'legacy.sqlite');
+    const old = new DatabaseSync(legacy);
+    old.exec(await readFile('tests/fixtures/schema-v1.sql', 'utf8'));
+    old.close();
+    const upgradeLater = await command('packages/server/dist/doctor.js', [], {
+      ...env,
+      EVERYLOCALE_DATABASE: relative(resolve('packages/server'), legacy),
+    });
+    assert.match(upgradeLater.output, /schema version 1; the service upgrades it on next start/);
+    const reread = new DatabaseSync(legacy, { readOnly: true });
+    const version = (reread.prepare('PRAGMA user_version').get() as { user_version: number })
+      .user_version;
+    reread.close();
+    assert.equal(version, 1, 'the doctor never upgrades a database');
     const store = new SqliteStore(join(directory, 'service.sqlite'));
     store.saveProject(
       projectSchema.parse({
@@ -214,12 +238,16 @@ test('the documented JSON example translates, renders, updates and reuses unchan
     inputPrice: 0,
     outputPrice: 0,
   };
-  const worker = new TranslationWorker(store, {
-    generator: { ...base, model: 'generator' },
-    reviewer: { ...base, model: 'reviewer' },
-    concurrency: 2,
-    intervalMs: 0,
-  });
+  const worker = new TranslationWorker(
+    store,
+    {
+      generator: { ...base, model: 'generator' },
+      reviewer: { ...base, model: 'reviewer' },
+      concurrency: 2,
+      intervalMs: 0,
+    },
+    log,
+  );
   try {
     store.saveProject(
       projectSchema.parse({

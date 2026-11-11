@@ -71,6 +71,46 @@ async function api<T>(path: string, method = 'GET', body?: unknown, key?: string
     );
   return data as T;
 }
+/** How often a waiting sync asks for progress; one request covers the whole submission. */
+const POLL_MS = 2000;
+type RequestStatus = {
+  total: number;
+  counts: Partial<Record<string, number>>;
+  attention: Array<{
+    unitId: string;
+    locale: string;
+    status: string;
+    failure: string | null;
+    error: string | null;
+    findings: string[];
+  }>;
+};
+async function waitFor(project: string, key: string, timeoutSeconds: number) {
+  const deadline = Date.now() + timeoutSeconds * 1000;
+  for (;;) {
+    const status = await api<RequestStatus>(
+      `/projects/${encodeURIComponent(project)}/requests/${encodeURIComponent(key)}`,
+    );
+    if (status.attention.length) {
+      const lines = status.attention.map(
+        (job) =>
+          `  ${job.locale} ${job.unitId}: ${job.status}${job.failure ? ` (${job.failure})` : ''}${job.error ? ` ${job.error}` : ''}${job.findings.length ? ` ${job.findings.join(' ')}` : ''}`,
+      );
+      throw new Error(
+        [
+          `${String(status.attention.length)} of ${String(status.total)} translations need attention:`,
+          ...lines,
+        ].join('\n'),
+      );
+    }
+    if ((status.counts.approved ?? 0) === status.total) return;
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Translation is still in progress after ${String(timeoutSeconds)} s: ${String(status.counts.approved ?? 0)} of ${String(status.total)} approved`,
+      );
+    await delay(POLL_MS);
+  }
+}
 async function filesUnder(directory: string): Promise<string[]> {
   const result: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -144,46 +184,23 @@ async function main() {
     );
     if (!args.includes('--import-only')) {
       const configuration = await api<Project>(`/projects/${encodeURIComponent(project)}`);
-      const submitted = await api<{ records: import('@everylocale/core').TranslationRecord[] }>(
+      // The key covers everything that changes the work, so a changed submission is never mistaken for a repeat.
+      const key = hash({
+        units,
+        locales,
+        glossary: configuration.glossary,
+        instructions: configuration.instructions,
+        policies: configuration.policies,
+        locked: configuration.locked,
+        pipeline: PIPELINE_REVISION,
+      });
+      await api(
         `/projects/${encodeURIComponent(project)}/jobs`,
         'POST',
         { unitIds: units.map((x) => x.id), locales },
-        hash({
-          units,
-          locales,
-          glossary: configuration.glossary,
-          instructions: configuration.instructions,
-          pipeline: PIPELINE_REVISION,
-        }),
+        key,
       );
-      if (args.includes('--wait')) {
-        const deadline = Date.now() + timeout * 1000;
-        const jobs = submitted.records;
-        for (;;) {
-          const records: import('@everylocale/core').TranslationRecord[] = [];
-          for (let start = 0; start < jobs.length; start += 16) {
-            if (Date.now() >= deadline)
-              throw new Error('Translation is still pending; synchronization timed out');
-            records.push(
-              ...(await Promise.all(
-                jobs
-                  .slice(start, start + 16)
-                  .map((job) =>
-                    api<import('@everylocale/core').TranslationRecord>(
-                      `/projects/${encodeURIComponent(project)}/jobs/${encodeURIComponent(job.id)}`,
-                    ),
-                  ),
-              )),
-            );
-          }
-          if (records.some((job) => ['failed', 'stale', 'review'].includes(job.status)))
-            throw new Error('Translation requires attention; open the review workspace');
-          if (records.every((job) => job.status === 'approved')) break;
-          if (Date.now() >= deadline)
-            throw new Error('Translation is still pending; synchronization timed out');
-          await delay(1000);
-        }
-      }
+      if (args.includes('--wait')) await waitFor(project, key, timeout);
     }
     console.log(`${imported.changed.length} changed; ${imported.unchanged.length} unchanged.`);
     return;

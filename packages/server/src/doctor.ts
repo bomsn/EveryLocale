@@ -1,18 +1,26 @@
-import { SqliteStore } from '@everylocale/store';
+import { existsSync } from 'node:fs';
+import { SqliteStore, verifyDatabase } from '@everylocale/store';
 import { loadConfig } from './config.js';
 import { databasePath } from './paths.js';
 
+/**
+ * Checks configuration and storage without changing anything: the database is verified
+ * read-only, and it is opened normally only when it is already at the current schema, so
+ * running the doctor never upgrades or creates a database.
+ */
 let store: SqliteStore | undefined;
 try {
-  store = new SqliteStore(databasePath());
+  const path = databasePath();
+  const check = existsSync(path) ? verifyDatabase(path) : null;
+  if (check?.current) store = new SqliteStore(path);
   const config = loadConfig(store);
-  if (
-    store.db.pragma('quick_check', { simple: true }) !== 'ok' ||
-    (store.db.pragma('foreign_key_check') as unknown[]).length
-  )
-    throw new Error('Database integrity verification failed');
   console.log('Workspace credentials: configured');
-  console.log('Database: readable, writable, and consistent');
+  if (!check) console.log('Database: not created yet; the service creates it on first start');
+  else if (check.current) console.log('Database: readable and consistent');
+  else
+    console.log(
+      `Database: consistent at schema version ${String(check.schemaVersion)}; the service upgrades it on next start after backing it up`,
+    );
   console.log(`Workspace address: ${config.publicOrigin}`);
   if (!config.worker) {
     console.error(

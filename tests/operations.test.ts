@@ -140,7 +140,9 @@ test('delivery survives restarts, obeys leases and retries, verifies signatures 
     store.importSources('example', [unitSchema.parse({ id: 'second', source: 'Help' })]);
     store.enqueue('example', ['second'], ['de'], 'second');
     const job = store.claim(() => 0)!;
-    store.fail(job.record.id, job.leaseToken, 'provider unavailable');
+    store.fail(job.record.id, job.leaseToken, 'provider_unavailable', 'provider unavailable');
+    // Failure alerts are aggregated by the periodic health check, not sent per job.
+    store.checkHealth(true);
     const first = store.claimDelivery()!;
     assert.equal(store.claimDelivery(), null);
     now += 31000;

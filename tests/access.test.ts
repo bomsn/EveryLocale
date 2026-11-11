@@ -230,3 +230,42 @@ test('an unexpected server failure returns its request id and never the internal
     await app.close();
   }
 });
+
+test('submission status counts every job and lists what needs attention within the caller limits', async () => {
+  const { store } = seeded();
+  const app = await createApp(store, config);
+  try {
+    const owner = json(
+      (
+        await app.inject({
+          url: '/api/v1/projects/site/requests/seed',
+          headers: { authorization: `Bearer ${admin}` },
+        })
+      ).body,
+    );
+    assert.equal(owner.total, 4);
+    assert.deepEqual(owner.counts, { awaiting: 4 });
+    assert.equal((owner.attention as unknown[]).length, 4);
+    const limited = store.mintToken('site', ['read'], Date.now() + 60000, { locales: ['de'] });
+    const scoped = json(
+      (
+        await app.inject({
+          url: '/api/v1/projects/site/requests/seed',
+          headers: { authorization: `Bearer ${limited.token}` },
+        })
+      ).body,
+    );
+    assert.deepEqual(
+      (scoped.attention as Array<{ locale: string }>).map((job) => job.locale),
+      ['de', 'de'],
+    );
+    const missing = await app.inject({
+      url: '/api/v1/projects/site/requests/unknown',
+      headers: { authorization: `Bearer ${admin}` },
+    });
+    assert.equal(missing.statusCode, 404);
+  } finally {
+    await app.close();
+    store.close();
+  }
+});

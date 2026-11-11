@@ -75,6 +75,16 @@ export function jobRoutes({ app, auth, config, store }: RouteContext) {
     const project = store.getProject(id);
     return { ...page, records: page.records.map((job) => withPolicy(project, job)) };
   });
+  app.get('/api/v1/projects/:project/requests/:key', async (request) => {
+    const id = projectId(request);
+    const user = auth.access(request, id, 'read');
+    const { key } = z.object({ key: z.string().min(1).max(200) }).parse(request.params);
+    const status = store.requestStatus(id, key);
+    return {
+      ...status,
+      attention: status.attention.filter((job) => auth.allows(user, job.locale, job.unitId)),
+    };
+  });
   app.get('/api/v1/projects/:project/summary', async (request) => {
     const id = projectId(request);
     const user = auth.access(request, id, 'read');

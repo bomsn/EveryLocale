@@ -1,10 +1,13 @@
 import {
+  ContractError,
   estimateReservation,
   estimateReviewReservation,
+  FAILURES,
   ProviderError,
   translateAndReview,
   reviewTranslation,
   validateTranslation,
+  type FailureCode,
   type ProviderConfig,
 } from '@everylocale/core';
 import type { LocalizationStore, ClaimedJob } from '@everylocale/store';
@@ -16,16 +19,39 @@ export type WorkerConfig = {
   concurrency: number;
   intervalMs: number;
 };
+/** The subset of a pino logger the worker writes to. */
+export type WorkerLog = {
+  error(fields: Record<string, unknown>, message: string): void;
+  warn(fields: Record<string, unknown>, message: string): void;
+};
+export type ProviderPause = { failure: FailureCode; message: string; since: number };
+
+const HEARTBEAT_MS = 30000;
+const TICK_MS = 200;
+
+class InvalidSourceError extends Error {}
+
+/** Every error a job can end with maps to exactly one failure code. */
+function classify(error: unknown): { failure: FailureCode; message: string } {
+  if (error instanceof ProviderError) return { failure: error.failure, message: error.message };
+  if (error instanceof InvalidSourceError)
+    return { failure: 'structure_invalid', message: error.message };
+  if (error instanceof ContractError && error.code === 'cost_overrun')
+    return { failure: 'cost_overrun', message: error.message };
+  return { failure: 'internal', message: 'Unexpected error; see the service log' };
+}
+
 export class TranslationWorker {
   private stopped = true;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private active = new Set<Promise<void>>();
   private nextStart = 0;
   private abort = new AbortController();
+  private pause: ProviderPause | null = null;
   constructor(
     private store: LocalizationStore,
     private config: WorkerConfig,
-    private report: (message: string) => void = console.error,
+    private log: WorkerLog,
   ) {
     const nextRequest = new Map<string, number>();
     const wrap = (provider: ProviderConfig): ProviderConfig => ({
@@ -40,6 +66,22 @@ export class TranslationWorker {
     });
     this.config = { ...config, generator: wrap(config.generator), reviewer: wrap(config.reviewer) };
   }
+  /** Whether new work can start: providers configured, available and not paused. */
+  available(): boolean {
+    return (
+      !this.pause &&
+      this.config.generator.available?.() !== false &&
+      this.config.reviewer.available?.() !== false
+    );
+  }
+  status(): { paused: ProviderPause | null } {
+    return { paused: this.pause };
+  }
+  /** The owner resumes after fixing the provider; queued work then continues. */
+  resume() {
+    if (this.pause) this.log.warn({ event: 'provider_resumed' }, 'translation provider resumed');
+    this.pause = null;
+  }
   start() {
     if (!this.stopped) return;
     this.stopped = false;
@@ -51,8 +93,7 @@ export class TranslationWorker {
       if (
         this.active.size < this.config.concurrency &&
         Date.now() >= this.nextStart &&
-        this.config.generator.available?.() !== false &&
-        this.config.reviewer.available?.() !== false
+        this.available()
       ) {
         const job = this.store.claim((project, unit, locale, reviewOnly, translation) =>
           reviewOnly && translation !== null
@@ -71,10 +112,13 @@ export class TranslationWorker {
           this.active.add(task);
         }
       }
-    } catch {
-      this.report('Translation worker could not claim a job');
+    } catch (error) {
+      this.log.error(
+        { err: error, event: 'claim_failed' },
+        'translation worker could not claim a job',
+      );
     }
-    this.timer = setTimeout(this.tick, 200);
+    this.timer = setTimeout(this.tick, TICK_MS);
     this.timer.unref();
   };
   private async run(job: ClaimedJob) {
@@ -87,7 +131,7 @@ export class TranslationWorker {
       } catch {
         lease.lost = true;
       }
-    }, 30000);
+    }, HEARTBEAT_MS);
     try {
       if (
         validateTranslation(
@@ -96,8 +140,10 @@ export class TranslationWorker {
           job.record.source.sourceLocale,
         ).some((finding) => finding.severity === 'critical')
       )
-        throw new Error('Invalid source structure');
-      const charge = (cost: number) => this.store.charge(id, job.leaseToken, cost);
+        throw new InvalidSourceError('The source message has invalid structure');
+      const charge = (cost: number) => {
+        this.store.charge(id, job.leaseToken, cost);
+      };
       const result =
         job.reviewOnly && job.record.translation
           ? await reviewTranslation(
@@ -127,32 +173,41 @@ export class TranslationWorker {
           result.summary,
         );
     } catch (error) {
-      if (!lease.lost) {
-        const retry = error instanceof ProviderError && error.retryable;
-        const delay = retry
-          ? Math.max(
-              error.retryAfterMs,
-              1000 * 2 ** job.record.attempts + Math.floor(Math.random() * 500),
-            )
-          : undefined;
-        try {
-          if (error instanceof ProviderError && error.costUsd !== undefined)
-            this.store.charge(id, job.leaseToken, error.costUsd);
-          this.store.fail(
-            id,
-            job.leaseToken,
-            error instanceof ProviderError
-              ? error.message
-              : 'Translation or review failed validation',
-            delay,
-            error instanceof ProviderError && error.uncertainCost,
-          );
-        } catch {
-          this.report('Translation lease no longer belongs to this worker');
-        }
-      }
+      if (!lease.lost) this.failed(job, error);
     } finally {
       clearInterval(heartbeat);
+    }
+  }
+  private failed(job: ClaimedJob, error: unknown) {
+    const { id, attempts } = job.record;
+    const { failure, message } = classify(error);
+    const provider = error instanceof ProviderError ? error : null;
+    if (failure === 'internal')
+      this.log.error({ err: error, event: 'job_failed', jobId: id }, 'translation job failed');
+    const pauses = FAILURES[failure].pausesProvider && !this.abort.signal.aborted;
+    if (pauses && !this.pause) {
+      this.pause = { failure, message, since: Date.now() };
+      this.log.error({ event: 'provider_paused', failure }, message);
+    }
+    try {
+      if (provider?.costUsd !== undefined) this.store.charge(id, job.leaseToken, provider.costUsd);
+      this.store.fail(id, job.leaseToken, failure, message, {
+        uncertainCost: provider?.uncertainCost ?? false,
+        requeue: pauses,
+        ...(provider?.retryable
+          ? {
+              retryAfterMs: Math.max(
+                provider.retryAfterMs,
+                1000 * 2 ** attempts + Math.floor(Math.random() * 500),
+              ),
+            }
+          : {}),
+      });
+    } catch (settleError) {
+      this.log.warn(
+        { err: settleError, event: 'lease_lost', jobId: id },
+        'translation lease no longer belongs to this worker',
+      );
     }
   }
   async stop() {

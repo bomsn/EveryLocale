@@ -10,7 +10,13 @@ import {
 } from '@everylocale/core';
 import { AI_REVIEW_SUMMARY, HUMAN_SUMMARY } from './approvals.js';
 import { withinLimits } from './access.js';
-import type { Finding, Project, SourceUnit, TranslationRecord } from '@everylocale/core';
+import type {
+  FailureCode,
+  Finding,
+  Project,
+  SourceUnit,
+  TranslationRecord,
+} from '@everylocale/core';
 import { decodeStrings, decodeUnit } from './decode.js';
 import { record, memoryHash } from './rows.js';
 import type { JobRow } from './rows.js';
@@ -314,22 +320,14 @@ export function claim(
       .prepare("SELECT * FROM jobs WHERE status='running' AND lease_until<=?")
       .all(store.now()) as JobRow[]) {
       store.release(expired, true);
-      store.db
-        .prepare('UPDATE jobs SET status=?,lease_token=NULL,lease_until=NULL,error=? WHERE id=?')
-        .run(
-          expired.attempts >= 3 ? 'failed' : 'pending',
-          'Previous worker lease expired; reserved cost charged conservatively',
-          expired.id,
-        );
-      if (expired.attempts >= 3)
-        deliveryMethods.emit(
-          store.db,
-          store.now(),
-          expired.project_id,
-          'alert.translation_failed',
-          expired.id,
-          { locale: expired.locale, reason: 'worker_interrupted' },
-        );
+      const message = 'Previous worker lease expired; reserved cost charged conservatively';
+      if (expired.attempts >= MAX_ATTEMPTS) markFailed(store, expired.id, 'lease_expired', message);
+      else
+        store.db
+          .prepare(
+            "UPDATE jobs SET status='pending',failure='lease_expired',lease_token=NULL,lease_until=NULL,error=? WHERE id=?",
+          )
+          .run(message, expired.id);
     }
     const pending = store.db
       .prepare(
@@ -361,18 +359,11 @@ export function claim(
         reserve = estimate(project, unit, job.locale, reviewOnly, job.translation);
         if (!Number.isFinite(reserve) || reserve < 0) throw new Error('Invalid reservation');
       } catch {
-        store.db
-          .prepare(
-            "UPDATE jobs SET status='failed',error='Source structure or provider cost reservation is invalid' WHERE id=?",
-          )
-          .run(job.id);
-        deliveryMethods.emit(
-          store.db,
-          store.now(),
-          job.project_id,
-          'alert.translation_failed',
+        markFailed(
+          store,
           job.id,
-          { locale: job.locale, reason: 'invalid_reservation' },
+          'structure_invalid',
+          'Source structure or provider cost reservation is invalid',
         );
         continue;
       }
@@ -391,23 +382,13 @@ export function claim(
             .get(job.project_id, reserve)
         )
           continue;
-        store.db
-          .prepare("UPDATE jobs SET status='failed',error='Project budget exhausted' WHERE id=?")
-          .run(job.id);
-        deliveryMethods.emit(
-          store.db,
-          store.now(),
-          job.project_id,
-          'alert.budget_exhausted',
-          job.id,
-          { locale: job.locale },
-        );
+        markFailed(store, job.id, 'budget_exhausted', 'Project budget exhausted');
         continue;
       }
       const leaseToken = randomUUID();
       store.db
         .prepare(
-          "UPDATE jobs SET status='running',attempts=attempts+1,reserved=?,lease_token=?,lease_until=?,error=NULL WHERE id=?",
+          "UPDATE jobs SET status='running',attempts=attempts+1,reserved=?,lease_token=?,lease_until=?,error=NULL,failure=NULL WHERE id=?",
         )
         .run(reserve, leaseToken, store.now() + 150000, job.id);
       return { record: store.getJob(job.project_id, job.id), leaseToken, project, reviewOnly };
@@ -491,32 +472,47 @@ export function complete(
   });
 }
 
+/** Attempts a job gets before a retryable failure becomes final. */
+const MAX_ATTEMPTS = 3;
+
+/** Failed jobs keep their cause; alerts are aggregated from these rows by the health check. */
+function markFailed(store: SqliteStore, id: string, failure: FailureCode, message: string) {
+  store.db
+    .prepare(
+      "UPDATE jobs SET status='failed',failure=?,failed_at=?,error=?,lease_token=NULL,lease_until=NULL WHERE id=?",
+    )
+    .run(failure, store.now(), message.slice(0, 500), id);
+}
+
 export function fail(
   store: SqliteStore,
   id: string,
   token: string,
+  failure: FailureCode,
   message: string,
-  retryAfterMs?: number,
-  uncertainCost = false,
+  options: { retryAfterMs?: number; uncertainCost?: boolean; requeue?: boolean } = {},
 ) {
   store.transaction(() => {
     const job = store.leased(id, token);
-    store.release(job, uncertainCost);
-    const retry = retryAfterMs !== undefined && job.attempts < 3;
-    store.db
-      .prepare(
-        'UPDATE jobs SET status=?,error=?,lease_token=NULL,lease_until=NULL,available_at=? WHERE id=?',
-      )
-      .run(
-        retry ? 'pending' : 'failed',
-        message.slice(0, 500),
-        store.now() + (retryAfterMs ?? 0),
-        id,
-      );
-    if (!retry)
-      deliveryMethods.emit(store.db, store.now(), job.project_id, 'alert.translation_failed', id, {
-        locale: job.locale,
-      });
+    store.release(job, options.uncertainCost ?? false);
+    // A paused provider says nothing about this job, so the attempt is given back.
+    if (options.requeue) {
+      store.db
+        .prepare(
+          "UPDATE jobs SET status='pending',failure=?,error=?,attempts=MAX(0,attempts-1),lease_token=NULL,lease_until=NULL,available_at=? WHERE id=?",
+        )
+        .run(failure, message.slice(0, 500), store.now(), id);
+      return;
+    }
+    if (options.retryAfterMs !== undefined && job.attempts < MAX_ATTEMPTS) {
+      store.db
+        .prepare(
+          "UPDATE jobs SET status='pending',failure=?,error=?,lease_token=NULL,lease_until=NULL,available_at=? WHERE id=?",
+        )
+        .run(failure, message.slice(0, 500), store.now() + options.retryAfterMs, id);
+      return;
+    }
+    markFailed(store, id, failure, message);
   });
 }
 
@@ -528,8 +524,50 @@ export function retry(store: SqliteStore, projectId: string, id: string, actor: 
     if (store.source(projectId, job.unitId).source_hash !== job.sourceHash)
       throw new ContractError('stale_source', 'Import a new job for the current source');
     store.db
-      .prepare("UPDATE jobs SET status='pending',attempts=0,error=NULL,available_at=? WHERE id=?")
+      .prepare(
+        "UPDATE jobs SET status='pending',attempts=0,error=NULL,failure=NULL,failed_at=NULL,available_at=? WHERE id=?",
+      )
       .run(store.now(), id);
     store.audit(projectId, actor, 'translation.retry', id);
   });
+}
+
+export type RequestStatus = {
+  total: number;
+  counts: Partial<Record<TranslationRecord['status'], number>>;
+  /** Jobs that stop a release: failed, awaiting a person, in review or stale. */
+  attention: Array<
+    Pick<TranslationRecord, 'id' | 'unitId' | 'locale' | 'status' | 'failure' | 'error'> & {
+      findings: string[];
+    }
+  >;
+};
+const ATTENTION: ReadonlySet<string> = new Set(['failed', 'awaiting', 'review', 'stale']);
+
+/** Progress of one submission, by the idempotency key it was sent with. */
+export function requestStatus(store: SqliteStore, projectId: string, key: string): RequestStatus {
+  const row = store.db
+    .prepare('SELECT job_ids FROM requests WHERE project_id=? AND request_key=?')
+    .get(projectId, key) as { job_ids: string } | undefined;
+  if (!row) throw new ContractError('not_found', 'Submission not found', 404);
+  const records = decodeStrings(row.job_ids).map((id) => store.getJob(projectId, id));
+  const counts: RequestStatus['counts'] = {};
+  for (const job of records) counts[job.status] = (counts[job.status] ?? 0) + 1;
+  return {
+    total: records.length,
+    counts,
+    attention: records
+      .filter((job) => ATTENTION.has(job.status))
+      .map((job) => ({
+        id: job.id,
+        unitId: job.unitId,
+        locale: job.locale,
+        status: job.status,
+        failure: job.failure,
+        error: job.error,
+        findings: job.findings
+          .filter((finding) => finding.severity !== 'minor')
+          .map((finding) => finding.message),
+      })),
+  };
 }

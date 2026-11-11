@@ -93,7 +93,7 @@ const MIGRATIONS: readonly Migration[] = [
   {
     version: 4,
     description:
-      'Approval policies, unit tags, and reviewer tokens limited to locales and namespaces',
+      'Approval policies, limited reviewer tokens, revocable sessions and job failure codes',
     up: (db) => {
       // Project-wide approval modes become one catch-all policy with the same behavior.
       db.exec(`
@@ -107,6 +107,9 @@ const MIGRATIONS: readonly Migration[] = [
         );
         ALTER TABLE access_tokens ADD COLUMN locales TEXT;
         ALTER TABLE access_tokens ADD COLUMN namespaces TEXT;
+        ALTER TABLE jobs ADD COLUMN failure TEXT;
+        ALTER TABLE jobs ADD COLUMN failed_at INTEGER;
+        CREATE INDEX jobs_failures ON jobs(project_id, status, failed_at);
         CREATE TABLE sessions (
           id TEXT PRIMARY KEY, token_id TEXT REFERENCES access_tokens(id), csrf TEXT NOT NULL,
           created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0

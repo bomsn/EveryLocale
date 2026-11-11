@@ -5,7 +5,16 @@ import type { RouteContext } from '../http/context.js';
 export function operationRoutes({ app, auth, config, store }: RouteContext) {
   app.get('/api/v1/operations', async (request) => {
     auth.owner(request, 'inspect service operations');
-    return { ...store.operations(), events: store.deliveryEvents() };
+    return {
+      ...store.operations(),
+      providers: config.providers?.status() ?? null,
+      events: store.deliveryEvents(),
+    };
+  });
+  app.post('/api/v1/providers/resume', async (request) => {
+    auth.owner(request, 'resume translation providers');
+    config.providers?.resume();
+    return { ok: true };
   });
   app.post('/api/v1/deliveries/:id/retry', async (request) => {
     auth.owner(request, 'retry delivery');

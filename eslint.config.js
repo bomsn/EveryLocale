@@ -16,9 +16,8 @@ export default tseslint.config(
       'docs/**',
       'packages/react/flags/**',
       'tools/import-benchmark.ts',
-      // Plain browser JavaScript has no type information for these rules; the workspace
-      // script is linted once it is TypeScript.
-      'packages/server/public/**',
+      'packages/server/public/guides/**',
+      'packages/server/public/flags/**',
       '**/*.d.ts',
     ],
   },
@@ -59,6 +58,30 @@ export default tseslint.config(
     files: ['packages/react/src/**/*.tsx', 'examples/**/*.tsx'],
     plugins: { 'react-hooks': reactHooks, 'jsx-a11y': jsxA11y },
     rules: { ...reactHooks.configs.recommended.rules, ...jsxA11y.flatConfigs.strict.rules },
+  },
+  {
+    // The workspace is dependency-free browser JavaScript; these are the browser APIs it uses.
+    files: ['packages/server/public/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: Object.fromEntries(
+        [
+          'Blob',
+          'URL',
+          'URLSearchParams',
+          'clearTimeout',
+          'crypto',
+          'document',
+          'fetch',
+          'location',
+          'matchMedia',
+          'navigator',
+          'setInterval',
+          'setTimeout',
+          'window',
+        ].map((name) => [name, 'readonly']),
+      ),
+    },
   },
   {
     files: ['tests/**/*.ts'],

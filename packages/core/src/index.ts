@@ -5,6 +5,7 @@ export * from './policy.js';
 export * from './locales.js';
 export * from './validation.js';
 export * from './provider.js';
+export * from './failures.js';
 export * from './pipeline.js';
 export * from './formats/index.js';
 export * from './preview.js';

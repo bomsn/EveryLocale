@@ -1,12 +1,22 @@
 import { z } from 'zod';
 import { reviewSchema, type Finding, type Project, type SourceUnit } from './types.js';
-
-/** Generation gets one correction attempt after a structural validation failure. */
-const GENERATION_ATTEMPTS = 2;
-import { modelCall, reservation, type ProviderConfig } from './provider.js';
+import { modelCall, ProviderError, reservation, type ProviderConfig } from './provider.js';
 import { validateTranslation } from './validation.js';
 import { parse, TYPE, type MessageFormatElement } from '@formatjs/icu-messageformat-parser';
 import { localeTraits } from './locales.js';
+
+/** Generation gets one correction attempt after a structural validation failure. */
+const GENERATION_ATTEMPTS = 2;
+const translationOutput = z.object({ translation: z.string().max(100000) });
+/** Model output that parses as JSON but not as the requested shape fails the job with its cause. */
+function modelOutput<T>(schema: z.ZodType<T>, value: unknown, role: string): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success)
+    throw new ProviderError(`The model returned ${role} JSON in the wrong shape`, {
+      failure: 'model_output_invalid',
+    });
+  return parsed.data;
+}
 
 /**
  * English description of a locale for model instructions. The script is named when it differs
@@ -124,9 +134,7 @@ export async function translateAndReview(
       signal,
     );
     onCost(generated.costUsd);
-    const { translation } = z
-      .object({ translation: z.string().max(100000) })
-      .parse(generated.value);
+    const { translation } = modelOutput(translationOutput, generated.value, 'translation');
     const structural = validateTranslation(unit, translation, locale, project.glossary);
     if (!structural.some((x) => x.severity === 'critical'))
       return reviewTranslation(project, unit, locale, translation, reviewer, onCost, signal);
@@ -163,6 +171,6 @@ export async function reviewTranslation(
     signal,
   );
   onCost(reviewed.costUsd);
-  const review = reviewSchema.parse(reviewed.value);
+  const review = modelOutput(reviewSchema, reviewed.value, 'review');
   return { translation, findings: [...structural, ...review.findings], summary: review.summary };
 }

@@ -109,7 +109,9 @@ export class ChatGptConnection {
   private account(id: string): Account {
     const account = this.read(`account:${id}`, accountSchema);
     if (!account)
-      throw new ProviderError('Choose a saved ChatGPT account or continue with ChatGPT');
+      throw new ProviderError('Choose a saved ChatGPT account or continue with ChatGPT', {
+        failure: 'provider_configuration',
+      });
     return account;
   }
   accounts() {
@@ -148,7 +150,11 @@ export class ChatGptConnection {
         .run(id, token, Date.now() + 90000, Date.now());
       if (acquired.changes) break;
       if (Date.now() >= deadline)
-        throw new ProviderError('ChatGPT connection is busy; retry later', true, 1000);
+        throw new ProviderError('ChatGPT connection is busy; retry later', {
+          failure: 'provider_unavailable',
+          retryable: true,
+          retryAfterMs: 1000,
+        });
       await delay(100);
     }
     try {
@@ -164,7 +170,9 @@ export class ChatGptConnection {
           .prepare('SELECT token FROM auth_locks WHERE id=? AND expires_at>?')
           .get(id, Date.now()) as { token: string } | undefined;
         if (lock?.token !== token)
-          throw new ProviderError('ChatGPT credential lease expired; restart the connection');
+          throw new ProviderError('ChatGPT credential lease expired; restart the connection', {
+            failure: 'provider_configuration',
+          });
         this.write(`account:${id}`, account);
       })
       .immediate();
@@ -180,12 +188,20 @@ export class ChatGptConnection {
         signal: AbortSignal.timeout(15000),
       });
     } catch {
-      throw new ProviderError('ChatGPT connection is temporarily unavailable', true, 2000);
+      throw new ProviderError('ChatGPT connection is temporarily unavailable', {
+        failure: 'provider_unavailable',
+        retryable: true,
+        retryAfterMs: 2000,
+      });
     }
     const data = await this.json(response);
     if (!response.ok) {
       const code = safeCode((data as { error?: unknown }).error);
-      throw new ProviderError(`ChatGPT authorization: ${code}`, response.status >= 500, 2000);
+      throw new ProviderError(`ChatGPT authorization: ${code}`, {
+        failure: response.status >= 500 ? 'provider_unavailable' : 'provider_configuration',
+        retryable: response.status >= 500,
+        retryAfterMs: 2000,
+      });
     }
     return credentialsSchema.parse(data);
   }
@@ -207,7 +223,10 @@ export class ChatGptConnection {
         }
       return JSON.parse(Buffer.concat(parts).toString('utf8'));
     } catch {
-      throw new ProviderError('ChatGPT returned an invalid response', response.status >= 500);
+      throw new ProviderError('ChatGPT returned an invalid response', {
+        failure: response.status >= 500 ? 'provider_unavailable' : 'provider_response',
+        retryable: response.status >= 500,
+      });
     }
   }
   async accessToken(id: string) {
@@ -217,6 +236,7 @@ export class ChatGptConnection {
       if (!saved || account.paused || !saved.scope.split(' ').includes('chatgpt.tokens.use.direct'))
         throw new ProviderError(
           'ChatGPT plan usage is disabled or paused; check connection settings',
+          { failure: 'provider_configuration' },
         );
       if (saved.expiresAt > Date.now() + 60000) return saved.access_token;
       try {
@@ -451,10 +471,10 @@ export class ChatGptConnection {
       signal: AbortSignal.timeout(15000),
     });
     if (!response.ok)
-      throw new ProviderError(
-        `ChatGPT model discovery returned HTTP ${response.status}`,
-        response.status >= 500,
-      );
+      throw new ProviderError(`ChatGPT model discovery returned HTTP ${response.status}`, {
+        failure: response.status >= 500 ? 'provider_unavailable' : 'provider_configuration',
+        retryable: response.status >= 500,
+      });
     const data = z
       .object({
         models: z.array(
@@ -507,13 +527,13 @@ export class ChatGptConnection {
     requestId?: string | null,
   ): Promise<never> {
     const safe = safeCode(code);
-    if (
+    const paused =
       status === 401 ||
       [
         'subscription_sharing_usage_limit_exceeded',
         'subscription_sharing_user_not_eligible',
-      ].includes(safe)
-    )
+      ].includes(safe);
+    if (paused)
       await this.locked(id, (lease) => {
         const account = this.account(id);
         account.paused = safe;
@@ -526,9 +546,16 @@ export class ChatGptConnection {
       requestId && /^[A-Za-z0-9_-]{1,120}$/.test(requestId) ? `; request ${requestId}` : '';
     throw new ProviderError(
       `ChatGPT ${safe} (HTTP ${status}${diagnostic}); manage usage at https://chatgpt.com/settings/usage`,
-      retryable,
-      2000,
-      uncertain,
+      {
+        failure: retryable
+          ? 'provider_unavailable'
+          : paused
+            ? 'provider_configuration'
+            : 'provider_rejected',
+        retryable,
+        retryAfterMs: 2000,
+        uncertainCost: uncertain,
+      },
     );
   }
   provider(id: string, model: string): ProviderConfig {
@@ -558,7 +585,12 @@ export class ChatGptConnection {
             }),
           });
         } catch {
-          throw new ProviderError('ChatGPT request interrupted', true, 2000, true);
+          throw new ProviderError('ChatGPT request interrupted', {
+            failure: 'provider_unavailable',
+            retryable: true,
+            retryAfterMs: 2000,
+            uncertainCost: true,
+          });
         }
         if (!response.ok) {
           let code: unknown;
@@ -575,7 +607,13 @@ export class ChatGptConnection {
             response.headers.get('x-request-id'),
           );
         }
-        if (!response.body) throw new ProviderError('ChatGPT stream is missing', true, 2000, true);
+        if (!response.body)
+          throw new ProviderError('ChatGPT stream is missing', {
+            failure: 'provider_unavailable',
+            retryable: true,
+            retryAfterMs: 2000,
+            uncertainCost: true,
+          });
         const reader = response.body.getReader(),
           decoder = new TextDecoder();
         let pending = '',
@@ -601,7 +639,10 @@ export class ChatGptConnection {
           if (event.type === 'response.failed' || event.type === 'error')
             return { failure: event.response?.error?.code ?? event.error?.code ?? event.code };
           if (event.type === 'response.incomplete')
-            throw new ProviderError('ChatGPT response is incomplete', false, 0, true);
+            throw new ProviderError('ChatGPT response is incomplete', {
+              failure: 'provider_response',
+              uncertainCost: true,
+            });
           if (event.type === 'response.completed') {
             const output =
               event.response?.output
@@ -610,7 +651,10 @@ export class ChatGptConnection {
                 .filter((item) => item.type === 'output_text')
                 .map((item) => item.text ?? '')
                 .join('') ?? '';
-            if (!output) throw new ProviderError('ChatGPT completed without translation text');
+            if (!output)
+              throw new ProviderError('ChatGPT completed without translation text', {
+                failure: 'model_output_invalid',
+              });
             completed = {
               value: JSON.parse(output),
               costUsd: 0,
@@ -625,7 +669,10 @@ export class ChatGptConnection {
             pending += next.done ? decoder.decode() : decoder.decode(next.value, { stream: true });
             size += next.value?.length ?? 0;
             if (size > 1000000)
-              throw new ProviderError('ChatGPT stream exceeds size limit', false, 0, true);
+              throw new ProviderError('ChatGPT stream exceeds size limit', {
+                failure: 'provider_response',
+                uncertainCost: true,
+              });
             pending = pending.replaceAll('\r\n', '\n');
             for (let boundary; (boundary = pending.indexOf('\n\n')) >= 0; ) {
               const block = pending.slice(0, boundary);
@@ -657,17 +704,22 @@ export class ChatGptConnection {
           }
         } catch (error) {
           if (error instanceof ProviderError) throw error;
-          throw new ProviderError('ChatGPT stream was interrupted or malformed', true, 2000, true);
+          throw new ProviderError('ChatGPT stream was interrupted or malformed', {
+            failure: 'provider_unavailable',
+            retryable: true,
+            retryAfterMs: 2000,
+            uncertainCost: true,
+          });
         } finally {
           await reader.cancel().catch(() => {});
         }
         if (!completed)
-          throw new ProviderError(
-            'ChatGPT stream ended without confirmed completion',
-            true,
-            2000,
-            true,
-          );
+          throw new ProviderError('ChatGPT stream ended without confirmed completion', {
+            failure: 'provider_unavailable',
+            retryable: true,
+            retryAfterMs: 2000,
+            uncertainCost: true,
+          });
         return completed;
       },
     };

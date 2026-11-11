@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { databasePath } from './paths.js';
 import { validateProvider, type ProviderConfig } from '@everylocale/core';
 import type { WorkerConfig } from './worker.js';
@@ -65,6 +66,20 @@ export function loadConfig(store?: SqliteStore) {
     throw new Error(`EVERYLOCALE_LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}`);
   // Behind a reverse proxy, only the listed proxies may supply the client address.
   const trustProxy: string | false = process.env.EVERYLOCALE_TRUST_PROXY?.trim() || false;
+  const backupDirectory = process.env.EVERYLOCALE_BACKUP_DIR?.trim();
+  const backupHours = Number(process.env.EVERYLOCALE_BACKUP_INTERVAL_HOURS ?? 24);
+  const backupKeep = Number(process.env.EVERYLOCALE_BACKUP_KEEP ?? 7);
+  if (
+    backupDirectory &&
+    (!Number.isFinite(backupHours) ||
+      backupHours <= 0 ||
+      !Number.isInteger(backupKeep) ||
+      backupKeep < 1)
+  )
+    throw new Error('Backup interval must be positive hours and retention at least one backup');
+  const backups = backupDirectory
+    ? { directory: resolve(backupDirectory), intervalMs: backupHours * 3600000, keep: backupKeep }
+    : null;
   const concurrency = Number(process.env.EVERYLOCALE_CONCURRENCY ?? 2);
   const intervalMs = Number(process.env.EVERYLOCALE_PROVIDER_INTERVAL_MS ?? 500);
   if (
@@ -105,6 +120,7 @@ export function loadConfig(store?: SqliteStore) {
     publicOrigin: origin.origin,
     logLevel: logLevel as LogLevel,
     trustProxy,
+    backups,
     secureCookie: origin.protocol === 'https:',
     worker:
       generator && reviewer

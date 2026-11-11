@@ -5,6 +5,9 @@ import { SqliteStore } from '../packages/store/dist/index.js';
 import { projectSchema, unitSchema, type Finding, policyFor } from '../packages/core/dist/index.js';
 import { createApp } from '../packages/server/dist/app.js';
 import { TranslationWorker } from '../packages/server/dist/worker.js';
+import { recordingLog } from './support/log.js';
+
+const log = recordingLog();
 
 function fixture(mode: 'automatic' | 'human' = 'automatic') {
   const store = new SqliteStore(':memory:');
@@ -205,12 +208,16 @@ test('real HTTP worker automatically approves and exports without a human approv
     inputPrice: 1,
     outputPrice: 1,
   };
-  const worker = new TranslationWorker(store, {
-    generator: { ...base, model: 'generator' },
-    reviewer: { ...base, model: 'reviewer' },
-    concurrency: 1,
-    intervalMs: 0,
-  });
+  const worker = new TranslationWorker(
+    store,
+    {
+      generator: { ...base, model: 'generator' },
+      reviewer: { ...base, model: 'reviewer' },
+      concurrency: 1,
+      intervalMs: 0,
+    },
+    log,
+  );
   try {
     const job = enqueue('worker');
     worker.start();
