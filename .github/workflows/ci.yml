@@ -1,7 +1,8 @@
 name: Verify EveryLocale
+# Runs only when started by hand: Actions > Verify EveryLocale > Run workflow, or
+# `gh workflow run ci.yml --ref BRANCH`. pnpm ci:local runs the same checks locally.
 on:
-  push:
-    branches: [master]
+  workflow_dispatch:
 jobs:
   verify:
     strategy:

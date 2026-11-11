@@ -28,3 +28,4 @@ docs/*
 examples/*/build
 **/playwright-report
 **/coverage
+.playwright-mcp

@@ -38,7 +38,8 @@
     "test:matrix": "tsx tools/react-matrix.ts",
     "punctuation": "tsx tools/punctuation.ts",
     "coverage": "c8 node --experimental-strip-types --test --test-concurrency=4 tests/*.test.ts",
-    "test:next:registry": "tsx tools/next-smoke.ts --registry"
+    "test:next:registry": "tsx tools/next-smoke.ts --registry",
+    "live:check": "tsx --env-file-if-exists=.env tools/live-check.ts"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",

@@ -33,3 +33,4 @@ build/
 playwright-report/
 blob-report/
 coverage/
+.playwright-mcp/
