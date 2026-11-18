@@ -56,10 +56,10 @@
   },
   "dependencies": {
     "@formatjs/icu-messageformat-parser": "3.5.23",
-    "gettext-parser": "9.1.1",
+    "gettext-parser": "10.0.0",
     "intl-messageformat": "12.1.5",
     "opencc-js": "1.4.2",
-    "parse5": "8.0.1",
+    "parse5": "8.1.1",
     "plural-forms": "0.5.5",
     "rehype-stringify": "10.0.1",
     "remark-frontmatter": "5.0.0",
